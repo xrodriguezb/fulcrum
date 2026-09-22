@@ -17,6 +17,9 @@ cleanup() {
 trap cleanup EXIT
 
 echo "== bringing the stack up =="
+# From a clean state, always. The script asserts exact row counts, so a database
+# left behind by a previous run or by the demo would fail it for the wrong reason.
+compose down -v --remove-orphans > /dev/null 2>&1 || true
 compose up -d --build
 wait_for_stack
 
