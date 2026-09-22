@@ -1,0 +1,14 @@
+# Contract linting rules. Two rules are disabled deliberately.
+extends:
+  - recommended
+
+rules:
+  # Authentication is an explicit non-goal of this project, stated in the README.
+  # The rule would otherwise demand a security scheme that does not exist.
+  security-defined: off
+  # The only published server is the local development one. There is no hosted
+  # deployment to point at, and inventing a hostname would be worse.
+  no-server-example.com: off
+  operation-4xx-response: warn
+  operation-operationId: error
+  operation-summary: error
