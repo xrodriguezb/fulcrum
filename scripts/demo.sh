@@ -107,9 +107,19 @@ psql_query "SELECT event_type || ' | attempts ' || attempts || ' | ' || failure_
             FROM dead_letter_events ORDER BY last_failed_at DESC LIMIT 1"
 
 step "9. Summary"
+# The consumer is still catching up on the orders the load test created, so the
+# summary waits for the pipeline to settle. Printing 25 created and 20 confirmed
+# would read as a defect when it is only a snapshot taken too early.
+total_orders="$(psql_query "SELECT count(*) FROM orders")"
+deadline=$((SECONDS + 60))
+while [ "${SECONDS}" -lt "${deadline}" ]; do
+  confirmed="$(psql_query "SELECT count(*) FROM orders WHERE status = 'confirmed'")"
+  [ "${confirmed}" = "${total_orders}" ] && break
+  sleep 1
+done
 confirmed="$(psql_query "SELECT count(*) FROM orders WHERE status = 'confirmed'")"
 dead="$(psql_query "SELECT count(*) FROM dead_letter_events")"
-printf '%-28s %s\n' 'orders created' "$(psql_query "SELECT count(*) FROM orders")"
+printf '%-28s %s\n' 'orders created' "${total_orders}"
 printf '%-28s %s\n' 'orders confirmed' "${confirmed}"
 printf '%-28s %s\n' 'dead letters' "${dead}"
 printf '%-28s %s\n' 'oversold' "${negative}"
