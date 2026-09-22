@@ -3,7 +3,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { HttpResponse, http } from 'msw';
 import { OrdersPanel } from './OrdersPanel';
-import { renderWithClient } from '../../test/render';
+import { renderWithClient, renderWithRefetch } from '../../test/render';
 import { server } from '../../test/server';
 import { problem, sampleOrder } from '../../test/handlers';
 
@@ -154,5 +154,36 @@ describe('OrdersPanel', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('SERVICE_UNAVAILABLE');
+  });
+});
+
+// A background refetch that fails must not take the table away. An operator
+// reading a list during an incident needs the numbers they already have, marked
+// as possibly out of date, rather than an error banner where the table was.
+describe('OrdersPanel when a refresh fails', () => {
+  it('keeps showing the last good data and says it may be stale', async () => {
+    let calls = 0;
+    server.use(
+      http.get('/api/v1/orders', () => {
+        calls += 1;
+        if (calls === 1) {
+          return HttpResponse.json({ items: [sampleOrder], total: 1, limit: 20, offset: 0 });
+        }
+        return problem(503, 'SERVICE_UNAVAILABLE', 'A dependency is not reachable.');
+      }),
+    );
+
+    const { rerenderQuery } = renderWithRefetch(<OrdersPanel />);
+
+    const table = await screen.findByRole('table');
+    expect(within(table).getByText('WIDGET-001 x2')).toBeInTheDocument();
+
+    await rerenderQuery();
+
+    await waitFor(() => {
+      expect(screen.getByText(/could not be refreshed/)).toBeInTheDocument();
+    });
+    // The data is still there.
+    expect(within(screen.getByRole('table')).getByText('WIDGET-001 x2')).toBeInTheDocument();
   });
 });
