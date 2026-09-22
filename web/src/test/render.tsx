@@ -21,3 +21,30 @@ export function renderWithClient(ui: ReactElement): RenderResult {
 
   return render(ui, { wrapper: Wrapper });
 }
+
+/**
+ * renderWithRefetch exposes a way to force a refetch, which is how a test can
+ * exercise the case where fresh data fails while stale data is still on screen.
+ */
+export function renderWithRefetch(ui: ReactElement): RenderResult & {
+  rerenderQuery: () => Promise<void>;
+} {
+  const client = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, staleTime: 0, gcTime: 0 },
+      mutations: { retry: false },
+    },
+  });
+
+  function Wrapper({ children }: { readonly children: ReactNode }): ReactNode {
+    return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+  }
+
+  const result = render(ui, { wrapper: Wrapper });
+  return {
+    ...result,
+    rerenderQuery: async () => {
+      await client.refetchQueries();
+    },
+  };
+}

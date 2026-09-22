@@ -146,6 +146,14 @@ func TestReadinessReportsAFailingDependency(t *testing.T) {
 	if recorder.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d, want 503", recorder.Code)
 	}
+	// The probe answers like every other error in this API, which means a
+	// problem document and the matching content type.
+	if got := recorder.Header().Get("Content-Type"); got != "application/problem+json" {
+		t.Errorf("content type = %q, want application/problem+json", got)
+	}
+	if !contains(recorder.Body.String(), "SERVICE_UNAVAILABLE") {
+		t.Errorf("the response does not carry the stable code: %s", recorder.Body.String())
+	}
 	if body := recorder.Body.String(); contains(body, "10.0.0.4") || contains(body, "dial tcp") {
 		t.Errorf("readiness leaked the dependency error: %s", body)
 	}

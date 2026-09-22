@@ -452,3 +452,28 @@ func mustFingerprint(t *testing.T, cmd orderapp.CreateOrderCommand) []byte {
 	}
 	return fingerprint
 }
+
+// The idempotency claim has to commit before the business transaction opens.
+// Called inside a caller's transaction it would join that transaction instead,
+// turning the two transaction protocol into the single transaction design ADR
+// 0005 rejects, and the failure would be a rare duplicate rather than an error.
+func TestCreateOrderRefusesToRunInsideATransaction(t *testing.T) {
+	h := newHandler(t)
+	seedInventory(t, h.pool, "WIDGET-001", 5, 1000)
+
+	err := h.manager.WithinTx(t.Context(), func(txCtx context.Context) error {
+		_, handleErr := h.handler.Handle(txCtx, command("nested-key",
+			orderapp.CommandLine{SKU: "WIDGET-001", Quantity: 1}))
+		return handleErr
+	})
+
+	if err == nil {
+		t.Fatalf("creating an order inside a transaction was allowed")
+	}
+	if errs.KindOf(err) != errs.KindInternal {
+		t.Errorf("kind = %v, want internal (%v)", errs.KindOf(err), err)
+	}
+	if got := countRows(t, h.pool, "orders"); got != 0 {
+		t.Errorf("orders = %d, want 0", got)
+	}
+}

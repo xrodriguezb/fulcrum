@@ -3,9 +3,7 @@ package infra
 
 import (
 	"context"
-	"time"
 
-	"github.com/xrodriguezb/fulcrum/internal/outbox/app"
 	"github.com/xrodriguezb/fulcrum/internal/outbox/domain"
 	"github.com/xrodriguezb/fulcrum/internal/platform/errs"
 	"github.com/xrodriguezb/fulcrum/internal/platform/postgres"
@@ -45,36 +43,6 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())`
 		}
 	}
 	return nil
-}
-
-// Stats reports outbox health for the operations console and the metrics
-// endpoint.
-func (w *Writer) Stats(ctx context.Context) (app.Stats, error) {
-	const query = `
-SELECT
-  count(*) FILTER (WHERE published_at IS NULL)                        AS pending,
-  count(*) FILTER (WHERE published_at IS NULL AND attempts > 0)       AS failing,
-  count(*) FILTER (WHERE published_at IS NOT NULL)                    AS published,
-  coalesce(extract(epoch FROM now() - min(occurred_at)
-    FILTER (WHERE published_at IS NULL)), 0)                          AS oldest_age_seconds,
-  coalesce((
-    SELECT id::text FROM outbox_events
-    WHERE published_at IS NULL
-    ORDER BY occurred_at
-    LIMIT 1), '')                                                     AS oldest_id
-FROM outbox_events`
-
-	var (
-		stats      app.Stats
-		ageSeconds float64
-	)
-	err := w.tx.Executor(ctx).QueryRow(ctx, query).Scan(
-		&stats.Pending, &stats.Failing, &stats.Published, &ageSeconds, &stats.OldestUnpublishedEvent)
-	if err != nil {
-		return app.Stats{}, errs.Internal("read outbox stats", err)
-	}
-	stats.OldestUnpublishedAge = time.Duration(ageSeconds * float64(time.Second))
-	return stats, nil
 }
 
 // nullableText keeps an empty optional string out of the column as NULL, so that

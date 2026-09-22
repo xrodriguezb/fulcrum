@@ -58,5 +58,7 @@ func New(deps Deps) http.Handler {
 		ErrorHandling: promhttp.ContinueOnError,
 	}))
 
-	return deps.Chain(mux)
+	// The routing wrapper is innermost, so it sees the statuses the mux itself
+	// produces and nothing that a handler wrote.
+	return deps.Chain(httpx.RoutingProblems(deps.Logger)(mux))
 }

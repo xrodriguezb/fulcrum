@@ -56,22 +56,22 @@ interface QueryLike<T> {
  * data that is present but known to be out of date is neither success nor error,
  * and showing it as either would mislead an operator.
  */
-export function fromQuery<T>(
-  query: QueryLike<T>,
-  isEmpty: (data: T) => boolean,
-  staleReason?: string,
-): RequestState<T> {
+export function fromQuery<T>(query: QueryLike<T>, isEmpty: (data: T) => boolean): RequestState<T> {
   if (query.error) {
+    // Data that is known to be out of date is neither success nor error.
+    // Replacing a table an operator is reading with an error banner, because a
+    // background refetch failed, hides the numbers they still need.
+    if (query.data !== undefined && !isEmpty(query.data)) {
+      return {
+        status: 'stale',
+        data: query.data,
+        reason: 'These numbers could not be refreshed and may be out of date.',
+      };
+    }
     return { status: 'error', error: toApiError(query.error) };
   }
-  if (query.isPending) {
+  if (query.isPending || query.data === undefined) {
     return { status: 'loading' };
-  }
-  if (query.data === undefined) {
-    return { status: 'loading' };
-  }
-  if (staleReason !== undefined && staleReason !== '') {
-    return { status: 'stale', data: query.data, reason: staleReason };
   }
   if (isEmpty(query.data)) {
     return { status: 'empty' };
