@@ -1,0 +1,230 @@
+/* One stylesheet. The console is four panels, and a design system for four
+   panels is more code than the panels. */
+
+:root {
+  --bg: #0f1115;
+  --panel: #171a21;
+  --line: #262b35;
+  --text: #e6e9ef;
+  --muted: #9aa4b2;
+  --accent: #6aa9ff;
+  --danger: #ff6b6b;
+  --ok: #57d9a3;
+  --warn: #ffc857;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.app-header,
+.app-footer {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.app-footer {
+  border-bottom: none;
+  border-top: 1px solid var(--line);
+}
+
+h1 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+h2 {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.app-main {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  grid-template-columns: 1fr;
+}
+
+/* Two columns once there is room for them. Below that everything stacks, which
+   is the layout a phone at 375px needs. */
+@media (min-width: 900px) {
+  .app-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem;
+  min-width: 0;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.warning {
+  color: var(--warn);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+
+th,
+td {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+thead th {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin: 0;
+}
+
+.metrics dt {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.metrics dd {
+  margin: 0;
+  font-size: 1.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
+input {
+  background: #10131a;
+  border: 1px solid var(--line);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 0.4rem 0.5rem;
+  font: inherit;
+}
+
+button {
+  background: var(--accent);
+  color: #07101f;
+  border: none;
+  border-radius: 6px;
+  padding: 0.45rem 0.9rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Focus must stay visible: keyboard users navigate this console during
+   incidents, which is the worst time to lose track of where they are. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.error-text {
+  color: var(--danger);
+  margin: 0.5rem 0 0;
+}
+
+.success-text {
+  color: var(--ok);
+  margin: 0.5rem 0 0;
+}
+
+.error {
+  border-left: 3px solid var(--danger);
+  padding-left: 0.75rem;
+}
+
+.status {
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.status-confirmed {
+  color: var(--ok);
+}
+
+.status-pending {
+  color: var(--warn);
+}
+
+.status-cancelled {
+  color: var(--danger);
+}
+
+.connection {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.connection-live {
+  color: var(--ok);
+}
+
+.connection-polling {
+  color: var(--warn);
+}
+
+.form-feedback:empty {
+  display: none;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
