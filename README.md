@@ -90,6 +90,15 @@ broker being killed and the backlog draining afterwards.
 - **A shift-left pipeline.** Hooks catch what hooks can catch, and the pipeline
   runs what a laptop cannot afford to.
 
+## The operations console
+
+![The Fulcrum operations console](docs/images/console.png)
+
+Live outbox depth and dead letter count over server sent events with a polling
+fallback, optimistic order creation that rolls back on a 409, per panel error
+boundaries, and zero accessibility violations under axe. The same page at 375px
+is in `docs/images/console-375px.png`.
+
 ## Reading it in thirty minutes
 
 | Minute | Where to look |
