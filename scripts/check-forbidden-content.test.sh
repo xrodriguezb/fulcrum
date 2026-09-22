@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Self-test for the forbidden content scanner. The fixtures build their offending
-# characters from escapes so that this file can itself pass the scanner.
+# Self-test for the forbidden content scanner. Every fixture builds its offending
+# bytes from escapes, including the attribution footers, so that this file stays
+# clean under the scanner it is testing.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,11 +32,11 @@ expect 1 "emoji is rejected" "${tmp}/emoji.md"
 printf 'A sentence \xe2\x80\x94 interrupted by an em dash.\n' > "${tmp}/emdash.md"
 expect 1 "em dash is rejected" "${tmp}/emdash.md"
 
-printf 'feat: add thing\n\nCo-authored-by: Someone <someone@example.com>\n' > "${tmp}/coauthor.txt"
-expect 1 "co-authored-by is rejected" "${tmp}/coauthor.txt"
+printf 'feat: add thing\n\nCo-\x61uthored-by: Someone <someone@example.com>\n' > "${tmp}/coauthor.txt"
+expect 1 "author attribution footer is rejected" "${tmp}/coauthor.txt"
 
-printf 'feat: add thing\n\nGenerated with some tool\n' > "${tmp}/generated.txt"
-expect 1 "generated with is rejected" "${tmp}/generated.txt"
+printf 'feat: add thing\n\nGener\x61ted with some tool\n' > "${tmp}/generated.txt"
+expect 1 "tool attribution footer is rejected" "${tmp}/generated.txt"
 
 printf 'A check mark \xe2\x9c\x85 in documentation.\n' > "${tmp}/checkmark.md"
 expect 1 "dingbat emoji is rejected" "${tmp}/checkmark.md"
