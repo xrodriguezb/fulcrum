@@ -43,7 +43,7 @@ help:
 setup: ## install hooks, tools and dependencies
 	$(GO) install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@$(GOLANGCI_VERSION)
 	$(GO) install github.com/evilmartians/lefthook@$(LEFTHOOK_VERSION)
-	$(GO) install github.com/gitleaks/gitleaks/v8@$(GITLEAKS_VERSION)
+	$(GO) install github.com/zricethezav/gitleaks/v8@$(GITLEAKS_VERSION)
 	$(GO) install golang.org/x/vuln/cmd/govulncheck@$(GOVULNCHECK_VERSION)
 	$(GO) install golang.org/x/tools/cmd/goimports@$(GOIMPORTS_VERSION)
 	$(GO) mod download
