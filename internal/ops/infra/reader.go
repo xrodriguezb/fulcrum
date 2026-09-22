@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/xrodriguezb/fulcrum/internal/ops/app"
-	"github.com/xrodriguezb/fulcrum/internal/platform/errs"
 	"github.com/xrodriguezb/fulcrum/internal/platform/postgres"
 )
 
@@ -53,7 +52,7 @@ SELECT
 		&snapshot.StuckIdempotencyKeys,
 	)
 	if err != nil {
-		return app.Snapshot{}, errs.Internal("read operational snapshot", err)
+		return app.Snapshot{}, postgres.Fault("read operational snapshot", err)
 	}
 
 	snapshot.Outbox.OldestUnpublishedSec = oldestSecs
@@ -82,12 +81,12 @@ LIMIT  $1 OFFSET $2`
 	// therefore reported as zero.
 	var total int
 	if err := executor.QueryRow(ctx, countQuery).Scan(&total); err != nil {
-		return nil, 0, errs.Internal("count dead letters", err)
+		return nil, 0, postgres.Fault("count dead letters", err)
 	}
 
 	rows, err := executor.Query(ctx, query, limit, offset)
 	if err != nil {
-		return nil, 0, errs.Internal("list dead letters", err)
+		return nil, 0, postgres.Fault("list dead letters", err)
 	}
 	defer rows.Close()
 
@@ -97,12 +96,12 @@ LIMIT  $1 OFFSET $2`
 		if scanErr := rows.Scan(&entry.ID, &entry.EventID, &entry.ConsumerName, &entry.EventType,
 			&entry.Attempts, &entry.FirstFailedAt, &entry.LastFailedAt, &entry.FailureReason,
 			&entry.CorrelationID, &entry.TraceID); scanErr != nil {
-			return nil, 0, errs.Internal("scan dead letter", scanErr)
+			return nil, 0, postgres.Fault("scan dead letter", scanErr)
 		}
 		entries = append(entries, entry)
 	}
 	if rows.Err() != nil {
-		return nil, 0, errs.Internal("iterate dead letters", rows.Err())
+		return nil, 0, postgres.Fault("iterate dead letters", rows.Err())
 	}
 	return entries, total, nil
 }

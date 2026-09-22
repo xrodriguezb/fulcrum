@@ -68,7 +68,7 @@ func (s *Store) Claim(ctx context.Context, key string, fingerprint []byte, expir
 		}
 		return app.ClaimResult{Claimed: false, Existing: existing}, nil
 	default:
-		return app.ClaimResult{}, errs.Internal("claim idempotency key", err)
+		return app.ClaimResult{}, postgres.Fault("claim idempotency key", err)
 	}
 }
 
@@ -85,7 +85,7 @@ WHERE  key = $1`
 
 	tag, err := s.tx.Executor(ctx).Exec(ctx, statement, key, responseStatus, responseBody, nullableUUID(orderID))
 	if err != nil {
-		return errs.Internal("complete idempotency key", err)
+		return postgres.Fault("complete idempotency key", err)
 	}
 	if tag.RowsAffected() == 0 {
 		return errs.Internal("complete idempotency key", fmt.Errorf("%w: %s", app.ErrKeyNotFound, key))
@@ -114,7 +114,7 @@ WHERE  key = $1
   AND  status = 'in_progress'`
 
 	if _, err := s.tx.Executor(ctx).Exec(ctx, statement, key, reason); err != nil {
-		return errs.Internal("fail idempotency key", err)
+		return postgres.Fault("fail idempotency key", err)
 	}
 	return nil
 }
@@ -135,7 +135,7 @@ func (s *Store) Get(ctx context.Context, key string) (*app.Record, error) {
 	case errors.Is(err, pgx.ErrNoRows):
 		return nil, fmt.Errorf("%w: %s", app.ErrKeyNotFound, key)
 	case err != nil:
-		return nil, errs.Internal("read idempotency key", err)
+		return nil, postgres.Fault("read idempotency key", err)
 	}
 
 	record.Status = app.Status(status)
@@ -150,7 +150,7 @@ func (s *Store) DeleteExpired(ctx context.Context, now time.Time) (int64, error)
 
 	tag, err := s.tx.Executor(ctx).Exec(ctx, statement, now)
 	if err != nil {
-		return 0, errs.Internal("sweep idempotency keys", err)
+		return 0, postgres.Fault("sweep idempotency keys", err)
 	}
 	return tag.RowsAffected(), nil
 }
@@ -161,7 +161,7 @@ func (s *Store) CountInProgressOlderThan(ctx context.Context, cutoff time.Time) 
 
 	var count int
 	if err := s.tx.Executor(ctx).QueryRow(ctx, statement, cutoff).Scan(&count); err != nil {
-		return 0, errs.Internal("count stuck idempotency keys", err)
+		return 0, postgres.Fault("count stuck idempotency keys", err)
 	}
 	return count, nil
 }
