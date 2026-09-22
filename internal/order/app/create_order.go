@@ -237,7 +237,7 @@ func (h *CreateOrderHandler) execute(ctx context.Context, cmd CreateOrderCommand
 			return appendErr
 		}
 
-		view := toView(order)
+		view := ViewOf(order)
 		body, marshalErr := json.Marshal(view)
 		if marshalErr != nil {
 			return errs.Internal("encode order response", marshalErr)
@@ -335,8 +335,9 @@ func toReservationRequests(lines []CommandLine) []inventory.ReservationRequest {
 	return requests
 }
 
-// toView renders an aggregate for the wire.
-func toView(order *domain.Order) OrderView {
+// ViewOf renders an aggregate for the wire. The read endpoints use it too, so
+// one order has one representation regardless of which handler produced it.
+func ViewOf(order *domain.Order) OrderView {
 	lines := make([]OrderLineView, 0, len(order.Lines()))
 	for _, line := range order.Lines() {
 		lines = append(lines, OrderLineView{
