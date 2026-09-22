@@ -8,6 +8,8 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 
 	"github.com/xrodriguezb/fulcrum/internal/consumer/app"
 	"github.com/xrodriguezb/fulcrum/internal/platform/config"
@@ -82,6 +84,10 @@ func (s *Source) Fetch(ctx context.Context, batch int) ([]app.Message, error) {
 			Payload:    msg.Data(),
 			Deliveries: deliveries,
 			Ack:        acker{msg: msg},
+			// The producer injected a trace context into the headers, so the
+			// consumer's work joins the trace that created the order rather
+			// than starting a second, unrelated one.
+			Context: otel.GetTextMapPropagator().Extract(ctx, propagation.HeaderCarrier(msg.Headers())),
 		})
 	}
 	if batches.Error() != nil {

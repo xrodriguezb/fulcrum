@@ -32,6 +32,7 @@ import (
 	"github.com/xrodriguezb/fulcrum/internal/platform/logging"
 	"github.com/xrodriguezb/fulcrum/internal/platform/messaging"
 	"github.com/xrodriguezb/fulcrum/internal/platform/postgres"
+	"github.com/xrodriguezb/fulcrum/internal/platform/telemetry"
 )
 
 func main() {
@@ -51,6 +52,18 @@ func run() error {
 	}
 
 	logger := logging.New(cfg)
+
+	shutdownTracing, err := telemetry.Setup(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("set up tracing: %w", err)
+	}
+	defer func() {
+		// Flushing runs on a context cancellation cannot reach: the spans
+		// describing the shutdown are the ones worth keeping.
+		if flushErr := shutdownTracing(context.WithoutCancel(ctx)); flushErr != nil {
+			logger.WarnContext(context.WithoutCancel(ctx), "cannot flush traces", "error", flushErr)
+		}
+	}()
 
 	// The worker never migrates. Two services racing to change the schema is a
 	// failure mode with no upside, so the API owns it.
