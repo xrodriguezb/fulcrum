@@ -33,6 +33,7 @@ import (
 	"github.com/xrodriguezb/fulcrum/internal/platform/logging"
 	"github.com/xrodriguezb/fulcrum/internal/platform/messaging"
 	"github.com/xrodriguezb/fulcrum/internal/platform/postgres"
+	"github.com/xrodriguezb/fulcrum/internal/platform/profiling"
 	"github.com/xrodriguezb/fulcrum/internal/platform/telemetry"
 )
 
@@ -131,6 +132,13 @@ func run() error {
 
 	group.Go(func() error {
 		return serveOperationalEndpoints(groupCtx, cfg, registry, pool, broker, logger)
+	})
+
+	group.Go(func() error {
+		return profiling.Serve(groupCtx, profiling.Config{
+			Enabled: cfg.Profiling.Enabled,
+			Port:    cfg.Profiling.Port,
+		}, logger)
 	})
 
 	if err := group.Wait(); err != nil && !errors.Is(err, context.Canceled) {
