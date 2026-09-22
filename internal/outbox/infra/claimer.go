@@ -10,15 +10,22 @@ import (
 	"github.com/xrodriguezb/fulcrum/internal/platform/postgres"
 )
 
-// claimStatement takes a batch of due events and marks them claimed.
+// claimStatement takes a batch of due events and leases them.
 //
 // FOR UPDATE SKIP LOCKED is what makes several publisher instances safe against
 // one database: a row another transaction is already holding is skipped rather
 // than waited on, so a second instance adds throughput instead of latency.
 //
-// The claim also increments attempts. A crash after the claim therefore leaves
-// the attempt counted, which is the conservative direction: an event is retried
-// slightly later rather than forever.
+// The row lock only lasts for the claim transaction, so it cannot be what keeps
+// a second instance away while the first one publishes. The claim therefore also
+// pushes next_attempt_at forward by a lease: until the lease expires the row is
+// not due, and no other instance considers it. A publisher that dies mid-publish
+// loses the lease and the event is picked up again when it expires, which is the
+// behaviour at-least-once delivery is built on.
+//
+// The claim also increments attempts, so a crash after the claim counts the
+// attempt. That is the conservative direction: the event is retried a little
+// later rather than immediately and forever.
 const claimStatement = `
 WITH claimed AS (
   SELECT id
@@ -30,8 +37,9 @@ WITH claimed AS (
   LIMIT  $1
 )
 UPDATE outbox_events o
-SET    claimed_at = now(),
-       attempts   = o.attempts + 1
+SET    claimed_at      = now(),
+       attempts        = o.attempts + 1,
+       next_attempt_at = now() + $2::interval
 FROM   claimed
 WHERE  o.id = claimed.id
 RETURNING o.id, o.aggregate_id, o.aggregate_type, o.event_type, o.event_version,
@@ -39,17 +47,26 @@ RETURNING o.id, o.aggregate_id, o.aggregate_type, o.event_type, o.event_version,
 
 // Claimer implements the publisher's view of the outbox.
 type Claimer struct {
-	tx *postgres.TxManager
+	tx    *postgres.TxManager
+	lease time.Duration
 }
 
+// defaultLease is used when a caller does not choose one. It has to be longer
+// than a publish can reasonably take and short enough that a crashed publisher
+// does not strand an event for long.
+const defaultLease = 30 * time.Second
+
 // NewClaimer builds a claimer over the transaction manager.
-func NewClaimer(tx *postgres.TxManager) *Claimer {
-	return &Claimer{tx: tx}
+func NewClaimer(tx *postgres.TxManager, lease time.Duration) *Claimer {
+	if lease <= 0 {
+		lease = defaultLease
+	}
+	return &Claimer{tx: tx, lease: lease}
 }
 
 // Claim takes up to batchSize due events.
 func (c *Claimer) Claim(ctx context.Context, batchSize int) ([]app.Claimed, error) {
-	rows, err := c.tx.Executor(ctx).Query(ctx, claimStatement, batchSize)
+	rows, err := c.tx.Executor(ctx).Query(ctx, claimStatement, batchSize, c.lease.String())
 	if err != nil {
 		return nil, errs.Unavailable("cannot claim outbox events", err)
 	}
