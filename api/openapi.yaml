@@ -19,6 +19,8 @@ servers:
 tags:
   - name: orders
     description: Order creation and retrieval
+  - name: operations
+    description: What the operations console reads
   - name: health
     description: Liveness and readiness
 
@@ -65,6 +67,136 @@ paths:
         '500':
           $ref: '#/components/responses/Problem'
 
+    get:
+      operationId: listOrders
+      summary: List orders, newest first
+      tags: [orders]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: A page of orders.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/orders/{id}:
+    get:
+      operationId: getOrder
+      summary: Fetch one order
+      tags: [orders]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The order.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/inventory:
+    get:
+      operationId: listInventory
+      summary: Current stock positions
+      tags: [operations]
+      responses:
+        '200':
+          description: Every stock position, ordered by sku.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryPage'
+        '500':
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/ops/outbox:
+    get:
+      operationId: getOperationalSnapshot
+      summary: Outbox depth, dead letter count and stuck idempotency keys
+      description: |
+        One query behind one endpoint. The console polls this, so it answers
+        every operational question in a single round trip.
+      tags: [operations]
+      responses:
+        '200':
+          description: The current operational state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OperationalSnapshot'
+        '500':
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/ops/dead-letters:
+    get:
+      operationId: listDeadLetters
+      summary: Events that will not be retried again
+      tags: [operations]
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Offset'
+      responses:
+        '200':
+          description: A page of dead letter entries, newest failure first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeadLetterPage'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/ops/stream:
+    get:
+      operationId: streamOperationalState
+      summary: Server sent events carrying operational snapshots
+      description: |
+        Emits an event named snapshot whenever the operational state changes,
+        with the same body as the outbox endpoint, plus a comment heartbeat so
+        an idle connection is not closed by a proxy.
+      tags: [operations]
+      responses:
+        '200':
+          description: An event stream.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '500':
+          $ref: '#/components/responses/Problem'
+
+  /metrics:
+    get:
+      operationId: metrics
+      summary: Prometheus exposition
+      tags: [operations]
+      responses:
+        '200':
+          description: Metrics in the Prometheus text format.
+          content:
+            text/plain:
+              schema:
+                type: string
+
   /healthz:
     get:
       operationId: liveness
@@ -108,6 +240,25 @@ components:
         type: string
         minLength: 1
         maxLength: 255
+
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Page size. Bounded, because an unbounded list is a denial of service with a friendly name.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Offset:
+      name: offset
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 0
+        default: 0
 
   responses:
     Problem:
@@ -187,6 +338,136 @@ components:
         unit_price_cents:
           type: integer
           minimum: 0
+
+    OrderPage:
+      type: object
+      additionalProperties: false
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Order'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+
+    InventoryItem:
+      type: object
+      additionalProperties: false
+      required: [sku, available, reserved, unit_price_cents, currency, version]
+      properties:
+        sku:
+          type: string
+        available:
+          type: integer
+          minimum: 0
+        reserved:
+          type: integer
+          minimum: 0
+        unit_price_cents:
+          type: integer
+          minimum: 0
+        currency:
+          type: string
+        version:
+          type: integer
+
+    InventoryPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryItem'
+
+    OutboxHealth:
+      type: object
+      additionalProperties: false
+      required: [pending, failing, published, oldest_unpublished_seconds]
+      properties:
+        pending:
+          type: integer
+          description: Events written and not yet published.
+        failing:
+          type: integer
+          description: Unpublished events that have already failed at least once.
+        published:
+          type: integer
+        oldest_unpublished_seconds:
+          type: number
+          description: Age of the oldest unpublished event. The number that tells an operator whether publication is keeping up.
+
+    OperationalSnapshot:
+      type: object
+      additionalProperties: false
+      required: [outbox, dead_letters, stuck_idempotency_keys, observed_at]
+      properties:
+        outbox:
+          $ref: '#/components/schemas/OutboxHealth'
+        dead_letters:
+          type: integer
+        stuck_idempotency_keys:
+          type: integer
+          description: |
+            Claims that never completed. A crash between the idempotency claim
+            and the business transaction leaves exactly this trace, so it is
+            surfaced rather than hidden.
+        observed_at:
+          type: string
+          format: date-time
+
+    DeadLetter:
+      type: object
+      additionalProperties: false
+      required: [id, event_id, consumer_name, event_type, attempts, first_failed_at, last_failed_at, failure_reason]
+      properties:
+        id:
+          type: string
+          format: uuid
+        event_id:
+          type: string
+          format: uuid
+        consumer_name:
+          type: string
+        event_type:
+          type: string
+        attempts:
+          type: integer
+        first_failed_at:
+          type: string
+          format: date-time
+        last_failed_at:
+          type: string
+          format: date-time
+        failure_reason:
+          type: string
+          description: An operator-facing summary. Never a driver error or a stack trace.
+        correlation_id:
+          type: string
+        trace_id:
+          type: string
+
+    DeadLetterPage:
+      type: object
+      additionalProperties: false
+      required: [items, total, limit, offset]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DeadLetter'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
 
     OrderStatus:
       type: string

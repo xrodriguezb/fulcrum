@@ -112,7 +112,8 @@ func truncateAll(t *testing.T, pool *pgxpool.Pool) {
 	t.Helper()
 
 	const truncate = `
-TRUNCATE TABLE outbox_events, idempotency_keys, order_lines, orders, inventory_items RESTART IDENTITY CASCADE`
+TRUNCATE TABLE outbox_events, idempotency_keys, order_lines, orders, inventory_items,
+               processed_events, dead_letter_events RESTART IDENTITY CASCADE`
 	if _, err := pool.Exec(t.Context(), truncate); err != nil {
 		t.Fatalf("truncate: %v", err)
 	}
