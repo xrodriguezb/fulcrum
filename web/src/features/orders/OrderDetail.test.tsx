@@ -17,6 +17,15 @@ const detailedOrder = {
   ],
 };
 
+/** cellsOf returns the text of every cell in the row whose header is given. */
+function cellsOf(rowHeader: string): readonly string[] {
+  const row = screen.getByText(rowHeader).closest('tr');
+  if (row === null) {
+    throw new Error(`no row carries the header ${rowHeader}`);
+  }
+  return Array.from(row.cells).map((cell) => cell.textContent.trim());
+}
+
 describe('OrderDetail', () => {
   it('reads the order by id and shows every line with its own subtotal', async () => {
     server.use(
@@ -25,13 +34,13 @@ describe('OrderDetail', () => {
 
     renderWithClient(<OrderDetail orderId={sampleOrder.id} onClose={vi.fn()} />);
 
-    expect(await screen.findByText('GADGET-002')).toBeInTheDocument();
-    // Two of one line and one of another at the same unit price: the subtotals
-    // differ, so a component that rendered the unit price twice would pass a
-    // weaker assertion than this one.
-    expect(screen.getByText('21.00 EUR')).toBeInTheDocument();
-    expect(screen.getByText('10.50 EUR')).toBeInTheDocument();
-    expect(screen.getByText('31.50 EUR')).toBeInTheDocument();
+    // Two of one line and one of another at the same unit price: reading the
+    // cells by position catches a component that put the unit price in the
+    // subtotal column, which asserting on the text alone would not.
+    await screen.findByText('GADGET-002');
+    expect(cellsOf('WIDGET-001')).toEqual(['WIDGET-001', '2', '10.50 EUR', '21.00 EUR']);
+    expect(cellsOf('GADGET-002')).toEqual(['GADGET-002', '1', '10.50 EUR', '10.50 EUR']);
+    expect(cellsOf('Total')).toEqual(['Total', '31.50 EUR']);
   });
 
   it('shows the full identifier, which the list truncates', async () => {

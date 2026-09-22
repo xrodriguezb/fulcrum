@@ -57,6 +57,8 @@ async function toProblem(response: Response): Promise<ApiError> {
 export const api = {
   listOrders: (limit = 20): Promise<OrderPage> => request<OrderPage>(`/orders?limit=${limit}`),
 
+  getOrder: (id: string): Promise<Order> => request<Order>(`/orders/${encodeURIComponent(id)}`),
+
   listInventory: (): Promise<InventoryPage> => request<InventoryPage>('/inventory'),
 
   snapshot: (): Promise<OperationalSnapshot> => request<OperationalSnapshot>('/ops/outbox'),
