@@ -186,4 +186,66 @@ describe('OrdersPanel when a refresh fails', () => {
     // The data is still there.
     expect(within(screen.getByRole('table')).getByText('WIDGET-001 x2')).toBeInTheDocument();
   });
+
+  it('opens the detail of the order whose identifier is activated', async () => {
+    const user = userEvent.setup();
+    const second = { ...sampleOrder, id: 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee' };
+    server.use(
+      http.get('/api/v1/orders', () =>
+        HttpResponse.json({ items: [sampleOrder, second], total: 2, limit: 20, offset: 0 }),
+      ),
+      http.get('/api/v1/orders/:id', ({ params }) =>
+        HttpResponse.json({ ...sampleOrder, id: String(params.id) }),
+      ),
+    );
+
+    renderWithClient(<OrdersPanel />);
+
+    await user.click(await screen.findByRole('button', { name: `Open order ${second.id}` }));
+
+    const detail = await screen.findByRole('region', { name: 'Order detail' });
+    expect(within(detail).getByText(second.id)).toBeInTheDocument();
+  });
+
+  it('marks the selected row, so the detail is not read against the wrong order', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get('/api/v1/orders', () =>
+        HttpResponse.json({ items: [sampleOrder], total: 1, limit: 20, offset: 0 }),
+      ),
+      http.get('/api/v1/orders/:id', () => HttpResponse.json(sampleOrder)),
+    );
+
+    renderWithClient(<OrdersPanel />);
+
+    const open = await screen.findByRole('button', { name: `Open order ${sampleOrder.id}` });
+    expect(open).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(open);
+
+    expect(open).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('returns focus to the row when the detail closes', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get('/api/v1/orders', () =>
+        HttpResponse.json({ items: [sampleOrder], total: 1, limit: 20, offset: 0 }),
+      ),
+      http.get('/api/v1/orders/:id', () => HttpResponse.json(sampleOrder)),
+    );
+
+    renderWithClient(<OrdersPanel />);
+
+    const open = await screen.findByRole('button', { name: `Open order ${sampleOrder.id}` });
+    await user.click(open);
+    await screen.findByRole('region', { name: 'Order detail' });
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => {
+      expect(screen.queryByRole('region', { name: 'Order detail' })).not.toBeInTheDocument();
+    });
+    expect(open).toHaveFocus();
+  });
 });

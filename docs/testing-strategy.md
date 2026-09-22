@@ -94,7 +94,7 @@ to reproduce. A double that is easier than the real thing tests the double.
 - Go unit and race suites: pass, 17 packages.
 - Go integration: 40 tests, pass under `-race` on PostgreSQL 16 locally and on 15
   and 16 in CI.
-- Web: 15 tests, zero axe violations, statements 84 percent, lines 87 percent.
-- Console production bundle: 267.77 kB, 82.41 kB gzipped.
+- Web: 31 tests, zero axe violations, statements 89 percent, lines 91 percent.
+- Console production bundle: 272.03 kB, 83.54 kB gzipped.
 - k6: 200 attempted, 5 created, 195 conflicted, 0 oversold, p95 22.6 ms locally
   and 175.1 ms on a shared CI runner.

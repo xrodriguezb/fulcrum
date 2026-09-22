@@ -160,6 +160,10 @@ load: ## k6 load test against a running stack
 	$(DOCKER) run --rm -i --network fulcrum_default -e API=http://api:8080 \
 	  -v "$(PWD)/test/load":/scripts $(K6_IMAGE) run /scripts/reservation.js
 
+.PHONY: screenshots
+screenshots: ## recapture the console images in docs/images from a running stack
+	node scripts/screenshot.mjs
+
 .PHONY: demo
 demo: ## the full narrated demonstration
 	./scripts/demo.sh

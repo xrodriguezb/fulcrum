@@ -15,11 +15,35 @@ import { toApiError, type ApiError } from '../../lib/requestState';
 
 export const ordersKey = ['orders'] as const;
 
+/** orderKey addresses one order, so refreshing a detail never refetches the list. */
+export const orderKey = (id: string) => ['orders', id] as const;
+
 /** useOrders reads the order list. */
 export function useOrders() {
   return useQuery({
     queryKey: ordersKey,
     queryFn: () => api.listOrders(),
+  });
+}
+
+/**
+ * useOrder reads one order.
+ *
+ * The detail is its own query rather than a lookup in the list cache: an order
+ * opened from a list that is minutes old would otherwise show a status the
+ * consumer has already moved on from, which is exactly the question the detail
+ * is opened to answer.
+ */
+export function useOrder(id: string) {
+  return useQuery({
+    queryKey: orderKey(id),
+    queryFn: async () => {
+      try {
+        return await api.getOrder(id);
+      } catch (cause) {
+        throw toApiError(cause);
+      }
+    },
   });
 }
 

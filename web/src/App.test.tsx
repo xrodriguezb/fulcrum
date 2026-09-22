@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { HttpResponse, http } from 'msw';
 import { App } from './App';
@@ -87,6 +88,45 @@ describe('App', () => {
 
     const results = await axe(container);
     expect(results.violations).toEqual([]);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('has no accessibility violations with an order detail open', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('EventSource', SilentEventSource);
+
+    server.use(
+      http.get('/api/v1/orders', () =>
+        HttpResponse.json({ items: [sampleOrder], total: 1, limit: 20, offset: 0 }),
+      ),
+      http.get('/api/v1/orders/:id', () => HttpResponse.json(sampleOrder)),
+    );
+
+    const { container } = renderWithClient(<App />);
+
+    await user.click(await screen.findByRole('button', { name: `Open order ${sampleOrder.id}` }));
+    await screen.findByRole('region', { name: 'Order detail' });
+
+    const results = await axe(container);
+    expect(results.violations).toEqual([]);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('lets the keyboard jump straight to a panel', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('EventSource', SilentEventSource);
+
+    renderWithClient(<App />);
+
+    const nav = screen.getByRole('navigation', { name: 'Panels' });
+    // The console is four panels of tables. Tabbing from the header to the dead
+    // letters means crossing every row of every panel above it, so there is a
+    // way in that skips them.
+    await user.click(within(nav).getByRole('link', { name: 'Dead letters' }));
+
+    expect(await screen.findByRole('region', { name: 'Dead letters' })).toHaveFocus();
 
     vi.unstubAllGlobals();
   });
