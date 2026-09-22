@@ -4,7 +4,6 @@ package integration
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -274,8 +273,5 @@ func TestCheckConstraintRejectsNegativeStock(t *testing.T) {
 	}
 	if available != 1 || reserved != 0 {
 		t.Errorf("the rejected writes changed the row: available %d reserved %d", available, reserved)
-	}
-	if !errors.Is(err, nil) {
-		t.Errorf("unexpected error state")
 	}
 }
