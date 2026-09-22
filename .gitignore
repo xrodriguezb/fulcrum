@@ -10,6 +10,10 @@ web/coverage/
 web/tsconfig.tsbuildinfo
 node_modules/
 
+# k6 writes its machine readable summary next to the script; the demo reads it
+# and then it is stale.
+test/load/summary.json
+
 # Go
 *.test
 *.out
