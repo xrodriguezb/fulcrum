@@ -52,7 +52,8 @@ func Serve(ctx context.Context, cfg Config, logger *slog.Logger) error {
 	mux.HandleFunc("GET /debug/pprof/trace", pprof.Trace)
 
 	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(cfg.Port))
-	listener, err := net.Listen("tcp", addr)
+	var listenConfig net.ListenConfig
+	listener, err := listenConfig.Listen(ctx, "tcp", addr)
 	if err != nil {
 		return fmt.Errorf("cannot open the profiling listener: %w", err)
 	}

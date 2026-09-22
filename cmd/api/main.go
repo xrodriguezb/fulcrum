@@ -157,5 +157,8 @@ func run() error {
 		})
 	})
 
-	return group.Wait()
+	if err := group.Wait(); err != nil {
+		return fmt.Errorf("serve: %w", err)
+	}
+	return nil
 }

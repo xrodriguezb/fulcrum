@@ -38,7 +38,8 @@ func TestDisabledProfilingOpensNoListener(t *testing.T) {
 		t.Fatalf("a disabled profiler kept running")
 	}
 
-	if conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), 200*time.Millisecond); err == nil {
+	dialer := net.Dialer{Timeout: 200 * time.Millisecond}
+	if conn, err := dialer.DialContext(t.Context(), "tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port))); err == nil {
 		conn.Close()
 		t.Errorf("something is listening on port %d while profiling is disabled", port)
 	}
@@ -58,7 +59,7 @@ func TestEnabledProfilingServesTheRuntimeProfiles(t *testing.T) {
 	waitForListener(t, base+"/debug/pprof/heap")
 
 	for _, path := range []string{"/debug/pprof/heap", "/debug/pprof/goroutine", "/debug/pprof/allocs"} {
-		response, err := http.Get(base + path)
+		response, err := get(t.Context(), base+path)
 		if err != nil {
 			t.Fatalf("GET %s returned %v", path, err)
 		}
@@ -96,17 +97,29 @@ func TestProfilingListensOnLoopbackOnly(t *testing.T) {
 	waitForListener(t, "http://"+net.JoinHostPort("127.0.0.1", strconv.Itoa(port))+"/debug/pprof/heap")
 
 	routable := routableAddress(t)
-	conn, err := net.DialTimeout("tcp", net.JoinHostPort(routable, strconv.Itoa(port)), 500*time.Millisecond)
+	dialer := net.Dialer{Timeout: 500 * time.Millisecond}
+	conn, err := dialer.DialContext(t.Context(), "tcp", net.JoinHostPort(routable, strconv.Itoa(port)))
 	if err == nil {
 		conn.Close()
 		t.Errorf("the profiler accepted a connection on %s, which is reachable from outside the host", routable)
 	}
 }
 
+// get is a context carrying http.Get, which is what the linter asks for and
+// what makes a hung profile endpoint fail the test rather than hang it.
+func get(ctx context.Context, url string) (*http.Response, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	return http.DefaultClient.Do(request)
+}
+
 func freePort(t *testing.T) int {
 	t.Helper()
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	var listenConfig net.ListenConfig
+	listener, err := listenConfig.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("cannot reserve a port: %v", err)
 	}
@@ -124,9 +137,9 @@ func waitForListener(t *testing.T, url string) {
 
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		response, err := http.Get(url)
+		response, err := get(t.Context(), url)
 		if err == nil {
-			io.Copy(io.Discard, response.Body)
+			_, _ = io.Copy(io.Discard, response.Body)
 			response.Body.Close()
 			return
 		}
