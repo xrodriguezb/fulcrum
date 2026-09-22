@@ -81,6 +81,20 @@ jobs:
         with:
           install-tools: 'true'
 
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+
+      # make fmt-check and make lint cover both languages, so this job needs the
+      # web toolchain even though its name suggests otherwise. Splitting them
+      # would mean two definitions of "formatted", which is how the two drift.
+      - name: Install web dependencies
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --fund=false
+          if [ -f web/package.json ]; then npm ci --prefix web --no-audit --fund=false; fi
+
       - name: Formatting and forbidden content
         run: make fmt-check
 
@@ -92,9 +106,7 @@ jobs:
 
       - name: Commit message format
         if: github.event_name == 'pull_request'
-        run: |
-          npm ci --no-audit --fund=false
-          npx commitlint --from "${{ github.event.pull_request.base.sha }}" --to "${{ github.event.pull_request.head.sha }}"
+        run: npx commitlint --from "${{ github.event.pull_request.base.sha }}" --to "${{ github.event.pull_request.head.sha }}"
 
       - name: Record result
         if: always()
