@@ -57,17 +57,12 @@ func Readiness(checks []Check, budget time.Duration, logger *slog.Logger) http.H
 		}
 
 		if !healthy {
-			w.Header().Set("Content-Type", "application/problem+json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			problem := Problem{
-				Type:     problemBaseURI + slug(errs.CodeServiceUnavailable),
-				Title:    "Service unavailable",
-				Status:   http.StatusServiceUnavailable,
-				Code:     errs.CodeServiceUnavailable,
-				Detail:   "A dependency this service needs is not reachable.",
-				Instance: r.URL.Path,
-			}
-			WriteJSON(w, r, http.StatusServiceUnavailable, problem, logger)
+			// The unavailable answer goes through the same writer as every other
+			// error, so it carries the same content type and status the rest of
+			// the API uses. Writing the header here and again in the writer also
+			// produced a superfluous WriteHeader call.
+			WriteProblem(w, r, errs.Unavailable(
+				"A dependency this service needs is not reachable.", nil), logger)
 			return
 		}
 
