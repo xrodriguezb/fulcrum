@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
 
+	"github.com/xrodriguezb/fulcrum/internal/api"
 	idempotencyinfra "github.com/xrodriguezb/fulcrum/internal/idempotency/infra"
 	inventoryinfra "github.com/xrodriguezb/fulcrum/internal/inventory/infra"
 	opsinfra "github.com/xrodriguezb/fulcrum/internal/ops/infra"
@@ -98,18 +99,18 @@ func run() error {
 		return fmt.Errorf("build the middleware chain: %w", err)
 	}
 
-	router := newRouter(routerDeps{
-		orders: orderinfra.NewHandlers(creator, orders, logger),
-		ops:    opsinfra.NewHandlers(opsinfra.NewReader(txManager), reserver, logger),
-		checks: []httpx.Check{
+	router := api.New(api.Deps{
+		Orders: orderinfra.NewHandlers(creator, orders, logger),
+		Ops:    opsinfra.NewHandlers(opsinfra.NewReader(txManager), reserver, logger),
+		Checks: []httpx.Check{
 			{Name: "postgres", Probe: func(probeCtx context.Context) error {
 				return postgres.HealthCheck(probeCtx, pool, time.Second)
 			}},
 			{Name: "nats", Probe: broker.Health},
 		},
-		registry: registry,
-		logger:   logger,
-		chain:    chain,
+		Registry: registry,
+		Logger:   logger,
+		Chain:    chain,
 	})
 
 	return httpx.Serve(ctx, httpx.ServerConfig{
