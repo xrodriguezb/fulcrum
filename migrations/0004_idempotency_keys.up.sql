@@ -3,7 +3,12 @@ CREATE TABLE idempotency_keys (
   request_fingerprint bytea       NOT NULL,
   status              text        NOT NULL,
   response_status     int,
-  response_body       jsonb,
+  -- The stored response is text, not jsonb. jsonb normalises whitespace and
+  -- reorders object keys, so a replayed response would not be byte identical to
+  -- the one the first caller received. Idempotent replay is a promise about the
+  -- response, and a client that compares or hashes bodies would see two
+  -- different answers to the same request.
+  response_body       text,
   order_id            uuid,
   created_at          timestamptz NOT NULL DEFAULT now(),
   completed_at        timestamptz,
