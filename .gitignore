@@ -1,0 +1,23 @@
+# Local build state that is never shared
+.dev/
+
+# Build output
+/bin/
+/dist/
+web/dist/
+web/node_modules/
+node_modules/
+
+# Go
+*.test
+*.out
+coverage.*
+
+# Environment
+.env
+.env.local
+
+# Editor and OS
+.DS_Store
+.idea/
+.vscode/
