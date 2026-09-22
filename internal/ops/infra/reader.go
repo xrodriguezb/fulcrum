@@ -66,28 +66,37 @@ SELECT
 // act: what failed, when, how many attempts, and the identifiers that join it to
 // the logs.
 func (r *Reader) DeadLetters(ctx context.Context, limit, offset int) ([]app.DeadLetter, int, error) {
+	const countQuery = `SELECT count(*) FROM dead_letter_events`
 	const query = `
 SELECT id::text, event_id::text, consumer_name, event_type, attempts,
        first_failed_at, last_failed_at, failure_reason,
-       coalesce(correlation_id, ''), coalesce(trace_id, ''),
-       count(*) OVER () AS total
+       coalesce(correlation_id, ''), coalesce(trace_id, '')
 FROM   dead_letter_events
 ORDER  BY last_failed_at DESC
 LIMIT  $1 OFFSET $2`
 
-	rows, err := r.tx.Executor(ctx).Query(ctx, query, limit, offset)
+	executor := r.tx.Executor(ctx)
+
+	// Counted separately for the same reason the order listing is: a page past
+	// the last one carries no rows, and a total travelling on the rows is
+	// therefore reported as zero.
+	var total int
+	if err := executor.QueryRow(ctx, countQuery).Scan(&total); err != nil {
+		return nil, 0, errs.Internal("count dead letters", err)
+	}
+
+	rows, err := executor.Query(ctx, query, limit, offset)
 	if err != nil {
 		return nil, 0, errs.Internal("list dead letters", err)
 	}
 	defer rows.Close()
 
 	entries := make([]app.DeadLetter, 0, limit)
-	total := 0
 	for rows.Next() {
 		var entry app.DeadLetter
 		if scanErr := rows.Scan(&entry.ID, &entry.EventID, &entry.ConsumerName, &entry.EventType,
 			&entry.Attempts, &entry.FirstFailedAt, &entry.LastFailedAt, &entry.FailureReason,
-			&entry.CorrelationID, &entry.TraceID, &total); scanErr != nil {
+			&entry.CorrelationID, &entry.TraceID); scanErr != nil {
 			return nil, 0, errs.Internal("scan dead letter", scanErr)
 		}
 		entries = append(entries, entry)
