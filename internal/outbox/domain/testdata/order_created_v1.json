@@ -1,0 +1,1 @@
+{"id":"6f1a2b3c-4d5e-4f60-8172-839405a6b7c8","type":"order.created","version":1,"occurred_at":"2026-09-21T10:00:00Z","correlation_id":"corr-1","trace_id":"4bf92f3577b34da6a3ce929d0e0e4736","aggregate_id":"0b7c6f4e-9d3a-4f1b-8c2d-5a6e7f8b9c0d","aggregate_type":"order","data":{"customer_id":"11111111-2222-4333-8444-555555555555","total_cents":2100}}
