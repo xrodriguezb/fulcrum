@@ -35,6 +35,14 @@ linters:
         - name: context-as-argument
         - name: indent-error-flow
     wrapcheck:
+      # Errors that cross a boundary inside this module are already classified by
+      # internal/platform/errs, which carries the kind, the stable code and the
+      # cause. Wrapping them again would add a prefix and no information, and it
+      # would push call sites towards fmt.Errorf where the taxonomy is what the
+      # next layer actually reads. Errors from outside the module still have to
+      # be wrapped, which is what this linter is for.
+      ignore-package-globs:
+        - github.com/xrodriguezb/fulcrum/*
       ignore-sigs:
         - .Errorf(
         - errors.New(
