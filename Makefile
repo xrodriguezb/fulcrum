@@ -20,7 +20,7 @@ GOIMPORTS_VERSION := latest
 # Pinned image digests are resolved by the pipeline; locally the tag is enough and
 # keeps the clean-clone requirement to "Docker installed" and nothing else.
 K6_IMAGE        ?= grafana/k6:0.55.0
-TRIVY_IMAGE     ?= aquasecurity/trivy:0.58.1
+TRIVY_IMAGE     ?= aquasec/trivy:0.58.1
 SYFT_IMAGE      ?= anchore/syft:v1.18.1
 REDOCLY_IMAGE   ?= redocly/cli:1.34.5
 
@@ -123,9 +123,8 @@ ifeq ($(HAS_WEB),yes)
 endif
 
 .PHONY: security
-security: ## govulncheck, gosec through golangci-lint, npm audit, trivy fs
+security: ## govulncheck, npm audit, trivy fs. gosec runs inside make lint
 	$(GOBIN)/govulncheck $(GO_PKGS)
-	$(GOBIN)/golangci-lint run --timeout=5m --enable-only gosec ./... || $(GOBIN)/golangci-lint run --timeout=5m
 	$(DOCKER) run --rm -v "$(PWD)":/src -w /src $(TRIVY_IMAGE) fs --scanners vuln,secret --exit-code 1 --severity HIGH,CRITICAL --no-progress .
 ifeq ($(HAS_WEB),yes)
 	npm audit --prefix $(WEB_DIR) --omit=dev --audit-level=high
