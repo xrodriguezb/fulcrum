@@ -97,6 +97,10 @@ type OutboxConfig struct {
 	BackoffCap   time.Duration
 	MaxAttempts  int
 	DrainTimeout time.Duration
+	// ClaimLease is how long a claimed row stays invisible to other publisher
+	// instances. It has to outlast a publish, or a second instance will claim a
+	// row that is still being published by the first.
+	ClaimLease time.Duration
 }
 
 // ConsumerConfig configures the event consumer and its retry policy.
@@ -207,6 +211,7 @@ func Load(lookup LookupFunc) (Config, error) {
 		BackoffCap:   duration(lookup, "OUTBOX_BACKOFF_CAP", 30*time.Second, &c),
 		MaxAttempts:  positiveInt(lookup, "OUTBOX_MAX_ATTEMPTS", 10, &c),
 		DrainTimeout: duration(lookup, "OUTBOX_DRAIN_TIMEOUT", 15*time.Second, &c),
+		ClaimLease:   duration(lookup, "OUTBOX_CLAIM_LEASE", 30*time.Second, &c),
 	}
 
 	cfg.Consumer = ConsumerConfig{
@@ -264,6 +269,11 @@ func crossValidate(cfg Config, c *collector) {
 	}
 	if cfg.HTTP.Port == cfg.Worker.MetricsPort {
 		c.add("WORKER_METRICS_PORT", "must differ from HTTP_PORT")
+	}
+	// A lease shorter than a publish would let a second instance claim a row
+	// that is still in flight, which is how an event gets published twice.
+	if cfg.Outbox.ClaimLease > 0 && cfg.NATS.PublishTimeout >= cfg.Outbox.ClaimLease {
+		c.add("OUTBOX_CLAIM_LEASE", "must be longer than NATS_PUBLISH_TIMEOUT")
 	}
 }
 

@@ -14,6 +14,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go"
+	tcnats "github.com/testcontainers/testcontainers-go/modules/nats"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 
@@ -25,9 +26,15 @@ import (
 // supported major version. The reservation guarantee depends on database
 // semantics, so proving it on one version only would be proving less than it
 // looks like.
-const defaultPostgresImage = "postgres:16-alpine"
+const (
+	defaultPostgresImage = "postgres:16-alpine"
+	defaultNATSImage     = "nats:2.10-alpine"
+)
 
-var containerDSN string
+var (
+	containerDSN string
+	natsURL      string
+)
 
 // TestMain owns the container for the whole package.
 //
@@ -77,7 +84,49 @@ func runSuite(m *testing.M) int {
 		return 1
 	}
 
+	// JetStream is enabled explicitly: without it the broker accepts publishes
+	// and stores nothing, which is exactly the failure this project argues
+	// against in ADR 0008.
+	broker, err := tcnats.Run(ctx, natsImage(), testcontainers.WithCmdArgs("--jetstream"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "integration: cannot start nats: %v\n", err)
+		return 1
+	}
+	defer func() {
+		if termErr := testcontainers.TerminateContainer(broker); termErr != nil {
+			fmt.Fprintf(os.Stderr, "integration: cannot terminate nats: %v\n", termErr)
+		}
+	}()
+
+	natsURL, err = broker.ConnectionString(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "integration: cannot resolve the broker url: %v\n", err)
+		return 1
+	}
+
 	return m.Run()
+}
+
+// natsImage allows CI to pin the broker version the same way it pins postgres.
+func natsImage() string {
+	if image := os.Getenv("FULCRUM_TEST_NATS_IMAGE"); image != "" {
+		return image
+	}
+	return defaultNATSImage
+}
+
+// natsConfig points a client at the container started for this package.
+func natsConfig(t *testing.T) config.NATSConfig {
+	t.Helper()
+	return config.NATSConfig{
+		URL:            natsURL,
+		StreamName:     "FULCRUM_TEST",
+		SubjectPrefix:  "fulcrum.test.events",
+		ConnectTimeout: 10 * time.Second,
+		ReconnectWait:  200 * time.Millisecond,
+		MaxReconnects:  -1,
+		PublishTimeout: 5 * time.Second,
+	}
 }
 
 // newPool returns a pool against the shared container, with the schema applied.
