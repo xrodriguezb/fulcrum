@@ -67,6 +67,9 @@ from an actual run of `make demo`, not from an argument:
 The same claim is a deterministic Go test that runs on PostgreSQL 15 and 16 in
 CI, under the race detector.
 
+`docs/demo-transcript.txt` is the captured output of that run, including the
+broker being killed and the backlog draining afterwards.
+
 ## What this demonstrates
 
 - **Atomic reservation.** One conditional UPDATE, guard and write in a single

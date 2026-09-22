@@ -1,0 +1,108 @@
+Captured output of `make demo`, run against a clean stack.
+
+This file is the artefact the README refers to. It is not documentation: it is
+what the command printed, trimmed only of progress output: docker build steps, container lifecycle lines
+and the k6 progress bar, which carry terminal control characters and symbols this
+repository does not permit in its content. Nothing here was rewritten.
+
+------------------------------------------------------------
+1. Building and starting the stack from a clean state
+------------------------------------------------------------
+
+ api  Built
+ web  Built
+ worker  Built
+every service reports healthy
+
+------------------------------------------------------------
+2. The schema was applied to an empty database
+------------------------------------------------------------
+1 enable_extensions
+2 orders
+3 inventory_items
+4 idempotency_keys
+5 outbox_events
+6 consumer_state
+
+------------------------------------------------------------
+3. Seeding one sku with five units
+------------------------------------------------------------
+seeded WIDGET-001 with 5 units at 1050 cents
+
+------------------------------------------------------------
+4. Two hundred concurrent buyers, one unit each
+------------------------------------------------------------
+
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+     execution: local
+        script: /scripts/reservation.js
+        output: -
+
+     scenarios: (100.00%) 1 scenario, 200 max VUs, 1m30s max duration (incl. graceful stop):
+
+reservation load test
+  attempted    200
+  created      5
+  conflicted   195
+  unexpected   0
+  oversold     0
+  p50          33.6 ms
+  p95          48.1 ms
+  p99          49.8 ms
+
+thresholds
+  pass  acceptable_responses rate>0.99
+  pass  orders_unexpected count==0
+  pass  http_req_duration p(95)<2000
+  pass  oversold count==0
+
+
+------------------------------------------------------------
+5. Results
+------------------------------------------------------------
+
+attempted                    200
+succeeded                    5
+conflicted                   195
+unexpected responses         0
+oversold                     0
+final available              0
+final reserved               5
+p50 latency                  33.6 ms
+p95 latency                  48.1 ms
+p99 latency                  49.8 ms
+
+------------------------------------------------------------
+6. Killing the broker, then creating twenty more orders
+------------------------------------------------------------
+orders accepted              20
+outbox depth                 20
+the api kept answering 201 because the outbox decouples acceptance from publication
+
+------------------------------------------------------------
+7. Restoring the broker and watching the backlog drain
+------------------------------------------------------------
+outbox depth                 0
+max processings per event    1
+
+------------------------------------------------------------
+8. Publishing a poison event
+------------------------------------------------------------
+03:52:06 Published 29 bytes to "fulcrum.events.order.created"
+unknown | attempts 1 | The event payload could not be decoded as an event envelope.
+
+------------------------------------------------------------
+9. Summary
+------------------------------------------------------------
+orders created               25
+orders confirmed             25
+dead letters                 1
+oversold                     0
+
+The claim holds: five units, two hundred buyers, five orders, nothing oversold.
+The stack is still running. Stop it with: make down
