@@ -122,6 +122,14 @@ func FingerprintOf(cmd CreateOrderCommand) ([]byte, error) {
 // winner commits, by which point it has already reserved inventory of its own.
 // See ADR 0005.
 func (h *CreateOrderHandler) Handle(ctx context.Context, cmd CreateOrderCommand) (CreateOrderResult, error) {
+	// The claim has to commit on its own. Running inside a caller's transaction
+	// would make it join that transaction, and the protocol in ADR 0005 would
+	// quietly become the single transaction design it exists to avoid.
+	if h.deps.Tx.InTransaction(ctx) {
+		return CreateOrderResult{}, errs.Internal("create order was called inside a transaction",
+			errors.New("the idempotency claim must commit before the business transaction"))
+	}
+
 	if err := h.validateKey(cmd.IdempotencyKey); err != nil {
 		return CreateOrderResult{}, err
 	}

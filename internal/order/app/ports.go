@@ -25,6 +25,11 @@ type Repository interface {
 // TxManager runs a function inside a database transaction.
 type TxManager interface {
 	WithinTx(ctx context.Context, fn func(ctx context.Context) error) error
+	// InTransaction reports whether the context is already inside one. The
+	// create order use case refuses to run in that case, because its idempotency
+	// claim has to commit before the business transaction opens and would
+	// silently join an outer one instead.
+	InTransaction(ctx context.Context) bool
 }
 
 // Clock returns the current time. The domain has no clock of its own, so the
