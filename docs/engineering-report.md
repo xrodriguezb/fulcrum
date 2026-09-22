@@ -81,6 +81,41 @@ The CI numbers are on a shared runner with the whole stack on one machine. They
 are included because hiding them would make the local numbers look like a claim
 about hardware this project does not have.
 
+### A captured profile
+
+`PPROF_ENABLED=true` opens the runtime profiles on a loopback listener of the
+binary's own. `docs/profiles/api-cpu-20s.pprof` is a twenty second cpu profile
+of the api under about 550 orders a second, with its `pprof -top -cum` view
+beside it in `api-cpu-20s.txt`. Read it with:
+
+```
+go tool pprof bin/api docs/profiles/api-cpu-20s.pprof
+```
+
+What it says, in the order it says it:
+
+| cumulative | where |
+| --- | --- |
+| 39.2% | `syscall.rawsyscalln`, which is the network and the database socket |
+| 35.3% | the whole middleware chain and handler, from `recovery` inward |
+| 33.9% | `CreateOrderHandler.Handle` |
+| 28.9% | the business transaction inside `WithinTx` |
+| 24.8% | `pgx.Conn.Exec`, the statements themselves |
+| 4.8% | the idempotency claim |
+| 3.7% | the reservation update |
+
+There is no application hotspot, which is the useful finding. The time is in
+syscalls and in round trips to PostgreSQL, the middleware chain costs almost
+nothing measurable next to them, and the two pieces of logic this repository
+argues about, the idempotency claim and the conditional reservation, are under
+five percent each. Optimising Go code here would buy nothing. The write path is
+bound by the database, which is also what the throughput ceiling says.
+
+The profile was captured with the api running on the host against the
+containerised database, which is why its rate is lower than the 1000 a second
+the in network run reaches. A profile is a shape rather than a benchmark, and
+the shape is the same.
+
 Two hot paths are benchmarked, because both are paid per request or per event
 before any I/O happens. On an M1 Max:
 

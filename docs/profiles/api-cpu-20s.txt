@@ -1,0 +1,38 @@
+File: fulcrum-api
+Type: cpu
+Time: 2026-09-22 09:50:40 CST
+Duration: 20.11s, Total samples = 5.64s (28.04%)
+Showing nodes accounting for 4.04s, 71.63% of 5.64s total
+Dropped 109 nodes (cum <= 0.03s)
+Showing top 30 nodes out of 132
+      flat  flat%   sum%        cum   cum%
+         0     0%     0%      2.40s 42.55%  runtime.mcall
+         0     0%     0%      2.40s 42.55%  runtime.park_m
+         0     0%     0%      2.40s 42.55%  runtime.schedule
+         0     0%     0%      2.36s 41.84%  runtime.findRunnable
+         0     0%     0%      2.27s 40.25%  net/http.(*conn).serve
+         0     0%     0%      2.21s 39.18%  internal/poll.ignoringEINTRIO (inline)
+     2.21s 39.18% 39.18%      2.21s 39.18%  syscall.rawsyscalln
+         0     0% 39.18%      2.21s 39.18%  syscall.syscall
+         0     0% 39.18%      2.21s 39.18%  syscall.syscalln
+         0     0% 39.18%      1.99s 35.28%  github.com/xrodriguezb/fulcrum/internal/platform/httpx.Chain.recovery.func2.1
+     0.01s  0.18% 39.36%      1.99s 35.28%  net/http.HandlerFunc.ServeHTTP
+         0     0% 39.36%      1.99s 35.28%  net/http.serverHandler.ServeHTTP
+     0.01s  0.18% 39.54%      1.98s 35.11%  github.com/xrodriguezb/fulcrum/internal/platform/httpx.tracing.func1.1
+         0     0% 39.54%      1.97s 34.93%  github.com/xrodriguezb/fulcrum/internal/platform/httpx.Chain.identifiers.func3.1
+         0     0% 39.54%      1.95s 34.57%  github.com/xrodriguezb/fulcrum/internal/platform/httpx.Chain.observability.func4.1
+         0     0% 39.54%      1.94s 34.40%  github.com/xrodriguezb/fulcrum/internal/api.New.New.RoutingProblems.func3.func4
+         0     0% 39.54%      1.94s 34.40%  github.com/xrodriguezb/fulcrum/internal/platform/httpx.Chain.bodyLimit.func5.1
+         0     0% 39.54%      1.94s 34.40%  github.com/xrodriguezb/fulcrum/internal/platform/httpx.Chain.contentType.func6.1
+         0     0% 39.54%      1.94s 34.40%  github.com/xrodriguezb/fulcrum/internal/platform/httpx.Chain.cors.func7.1
+         0     0% 39.54%      1.94s 34.40%  github.com/xrodriguezb/fulcrum/internal/platform/httpx.Chain.securityHeaders.func8.1
+         0     0% 39.54%      1.94s 34.40%  net/http.(*ServeMux).ServeHTTP
+         0     0% 39.54%      1.93s 34.22%  github.com/xrodriguezb/fulcrum/internal/order/infra.(*Handlers).Create
+         0     0% 39.54%      1.91s 33.87%  github.com/xrodriguezb/fulcrum/internal/order/app.(*CreateOrderHandler).Handle
+     1.81s 32.09% 71.63%      1.81s 32.09%  runtime.kevent
+         0     0% 71.63%      1.76s 31.21%  runtime.netpoll
+         0     0% 71.63%      1.63s 28.90%  github.com/xrodriguezb/fulcrum/internal/order/app.(*CreateOrderHandler).execute
+         0     0% 71.63%      1.63s 28.90%  github.com/xrodriguezb/fulcrum/internal/platform/postgres.(*TxManager).WithinTx
+         0     0% 71.63%      1.48s 26.24%  github.com/jackc/pgx/v5/pgconn.(*PgConn).ExecStatement
+         0     0% 71.63%      1.47s 26.06%  github.com/jackc/pgx/v5/pgconn.(*PgConn).execExtendedSuffix
+         0     0% 71.63%      1.40s 24.82%  github.com/jackc/pgx/v5.(*Conn).Exec
