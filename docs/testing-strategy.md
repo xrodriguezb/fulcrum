@@ -4,7 +4,7 @@
 
 | Level | Count | Runs against | Answers |
 |---|---|---|---|
-| Go unit | 109 test functions | Nothing external | Does this rule hold |
+| Go unit | 113 test functions | Nothing external | Does this rule hold |
 | Go integration | 40 test functions | Real PostgreSQL and NATS through Testcontainers | Does the database do what the design assumes |
 | Web | 15 tests | MSW at the network boundary | Can the operator do the thing |
 | End to end | 1 script, 9 assertions | The compose stack, in CI | Does the assembled system behave |
@@ -41,6 +41,17 @@ none was starved. This test found a real defect.
 **`TestDuplicateDeliveryLeavesOneEffect`** publishes an event, lets the consumer
 process it, replays the same event and asserts one deduplication row, one
 confirmed order and no dead letter.
+
+**The slow broker tests** answer the failure the blocked broker cannot. A broker
+that stops is easy: everything stops with it and the bound is obvious. A broker
+that is merely slow keeps accepting, so nothing looks broken, and a publisher
+without real backpressure answers by claiming faster than it can publish until
+the table is in memory. The double publishes after a fixed delay and records its
+own peak concurrency, so the worker bound is asserted rather than inferred from
+elapsed time: the claimer stays within the channel capacity plus one batch of
+what the workers have started, a shutdown mid publish still drains inside its
+budget, and a broker slower than the publish timeout schedules another attempt
+instead of dropping the event.
 
 **The leak tests.** The problem writer test feeds an error containing a hostname,
 a role name and a filesystem path and asserts none of them appear in the
