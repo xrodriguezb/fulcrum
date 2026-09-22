@@ -473,6 +473,38 @@ func TestAFailedDeadLetterWriteLeavesTheMessageForRedelivery(t *testing.T) {
 	}
 }
 
+// A cancelled context during processing is the shutdown, not the event. Dead
+// lettering it would make every deployment produce entries an operator has to
+// triage, and the event itself is perfectly fine.
+func TestCancellationDuringProcessingReturnsTheEventInsteadOfDeadLetteringIt(t *testing.T) {
+	t.Parallel()
+
+	handler := &countingHandler{failures: []error{context.Canceled}}
+	dlq := &memoryDeadLetters{}
+	consumer := newConsumer(t, handler, newDedup(), dlq, 5)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	acker := &recordingAcker{}
+	consumer.Process(ctx, app.Message{
+		Payload:    envelopeBytes(t, "00000000-0000-4000-8000-000000000048"),
+		Deliveries: 2,
+		Ack:        acker,
+	})
+
+	if len(dlq.list()) != 0 {
+		t.Errorf("an interrupted delivery was dead lettered: %+v", dlq.list())
+	}
+	_, naks, terms := acker.counts()
+	if naks != 1 {
+		t.Errorf("naks = %d, want 1 so the event comes back", naks)
+	}
+	if terms != 0 {
+		t.Errorf("terms = %d, want 0", terms)
+	}
+}
+
 func TestConsumerRejectsIncompleteWiring(t *testing.T) {
 	t.Parallel()
 

@@ -258,6 +258,22 @@ func (c *Consumer) Process(ctx context.Context, message Message) {
 		return
 	}
 
+	// A shutdown that interrupts processing is not a failure of the event. The
+	// message goes back to the broker immediately, because dead lettering it
+	// would turn every deployment into a source of false positives an operator
+	// has to triage.
+	if isCancellation(ctx, processErr) {
+		c.logger.InfoContext(context.WithoutCancel(ctx), "processing interrupted, returning the event",
+			slog.String("event_id", envelope.ID))
+		nakCtx, cancelNak := ackContext(ctx)
+		defer cancelNak()
+		if nakErr := message.Ack.Nak(nakCtx, 0); nakErr != nil {
+			c.logger.WarnContext(context.WithoutCancel(ctx), "cannot return an interrupted event",
+				slog.String("event_id", envelope.ID), slog.String("error", nakErr.Error()))
+		}
+		return
+	}
+
 	transient := errs.IsTransient(processErr)
 	c.metrics.Failed(envelope.EventType, errs.KindOf(processErr).String())
 
@@ -388,6 +404,15 @@ func describeFailure(err error, transient, exhausted bool) string {
 	default:
 		return fmt.Sprintf("The event could not be processed (%s).", code)
 	}
+}
+
+// isCancellation reports whether the failure is the shutdown rather than the
+// event. Both the returned error and the context are checked, because a driver
+// may wrap cancellation in its own error type.
+func isCancellation(ctx context.Context, err error) bool {
+	return ctx.Err() != nil ||
+		errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded)
 }
 
 func errorText(err error) string {
