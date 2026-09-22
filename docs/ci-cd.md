@@ -43,7 +43,7 @@ detect-changes
    |      |
    |      +-- test-go-integration   matrix: postgres 15 and 16
    +-- test-web       tsc, eslint, vitest, axe, coverage artifact
-   +-- security       govulncheck, gosec through golangci-lint, npm audit, trivy fs
+   +-- security       govulncheck, gosec through golangci-lint, npm audit, trivy fs, hadolint
    +-- build-images   buildx with layer cache, image size report
           |
           +-- e2e-compose   primary flow, idempotent replay, broker kill and recovery
