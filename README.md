@@ -127,7 +127,8 @@ error boundaries, and zero accessibility violations under axe. The same page at
 | `docs/security.md` | Threat model with residual risk named |
 | `docs/observability.md` | One order followed across three processes |
 | `docs/ci-cd.md` | The five layers and the reasoning |
-| `docs/adr/` | Ten decisions, each with its rejected alternatives |
+| `docs/adr/` | Eleven decisions, each with its rejected alternatives |
+| `CHANGELOG.md` | What is in the release, and the limitations that are deliberate |
 
 ## Commands
 
