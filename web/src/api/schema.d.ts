@@ -19,6 +19,9 @@ export interface paths {
          * @description Reserves inventory for every line and persists the order in a single
          *     transaction. The Idempotency-Key header is required: a retry of the same
          *     request returns the stored response rather than reserving again.
+         *
+         *     A 503 means a dependency could not be reached and the request may
+         *     succeed if it is sent again with the same key. A 500 means it will not.
          */
         post: operations["createOrder"];
         delete?: never;
@@ -352,6 +355,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     createOrder: {
@@ -390,6 +394,7 @@ export interface operations {
             415: components["responses"]["Problem"];
             422: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     getOrder: {
@@ -415,6 +420,7 @@ export interface operations {
             400: components["responses"]["Problem"];
             404: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     listInventory: {
@@ -436,6 +442,7 @@ export interface operations {
                 };
             };
             500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     getOperationalSnapshot: {
@@ -457,6 +464,7 @@ export interface operations {
                 };
             };
             500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     listDeadLetters: {
@@ -483,6 +491,7 @@ export interface operations {
             };
             400: components["responses"]["Problem"];
             500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     streamOperationalState: {
@@ -504,6 +513,7 @@ export interface operations {
                 };
             };
             500: components["responses"]["Problem"];
+            503: components["responses"]["Problem"];
         };
     };
     metrics: {
