@@ -53,6 +53,11 @@ and why.
   `gitleaks` runs in the pre-commit hook and in the pipeline.
 - Dependencies are scanned by `govulncheck`, `gosec` through golangci-lint,
   `npm audit` and `trivy`, on every pull request.
+- Published images carry a signed provenance attestation stating which workflow,
+  at which commit, produced that digest. An SBOM says what is inside an image; the
+  attestation says where it came from, and the two answer different questions
+  during an incident. Verify with
+  `gh attestation verify oci://ghcr.io/xrodriguezb/fulcrum/api:latest --owner xrodriguezb`.
 - Published images are rescanned nightly. That check found 35 high and 2 critical
   advisories in the web image, inherited from a stale base, weeks of pull request
   pipelines having passed. It was fixed the same day.
