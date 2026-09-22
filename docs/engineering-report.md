@@ -81,6 +81,22 @@ The CI numbers are on a shared runner with the whole stack on one machine. They
 are included because hiding them would make the local numbers look like a claim
 about hardware this project does not have.
 
+Two hot paths are benchmarked, because both are paid per request or per event
+before any I/O happens. On an M1 Max:
+
+```
+BenchmarkFingerprint/lines=1        2141 ns/op    45.77 MB/s    2297 B/op     40 allocs/op
+BenchmarkFingerprint/lines=10       8857 ns/op    45.62 MB/s    7931 B/op    163 allocs/op
+BenchmarkFingerprint/lines=50      38365 ns/op    45.98 MB/s   37833 B/op    689 allocs/op
+BenchmarkEnvelopeRoundTrip/marshal  1364 ns/op                   648 B/op      3 allocs/op
+```
+
+Fingerprinting is linear in body size at a steady 46 MB/s, which puts it three
+orders of magnitude below the round trip it precedes: a 50 line order spends 38
+microseconds being fingerprinted and around 20 milliseconds being reserved. It is
+measured rather than assumed, because it runs before the work that could refuse
+the request, so every rejected request pays it too.
+
 Two query plans were checked with `EXPLAIN ANALYZE`. The reservation is an index
 scan on the primary key, seven buffers. The outbox claim was sorting every due
 row on every claim, which is in the audit findings below.
