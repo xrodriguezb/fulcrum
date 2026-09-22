@@ -78,12 +78,13 @@ func Chain(cfg MiddlewareConfig) (Middleware, error) {
 func recovery(logger *slog.Logger) Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := r.Context()
 			defer func() {
 				if recovered := recover(); recovered != nil {
 					// The panic value is for the operator. The caller gets a
 					// generic internal error, because a panic message routinely
 					// contains a pointer, a query or a path.
-					logger.ErrorContext(r.Context(), "handler panicked",
+					logger.ErrorContext(ctx, "handler panicked",
 						slog.Any("panic", recovered),
 						slog.String("method", r.Method),
 						slog.String("path", r.URL.Path))

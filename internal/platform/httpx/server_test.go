@@ -16,7 +16,8 @@ import (
 func freeAddr(t *testing.T) string {
 	t.Helper()
 
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	var config net.ListenConfig
+	listener, err := config.Listen(t.Context(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserve a port: %v", err)
 	}
@@ -183,7 +184,8 @@ func TestLivenessIgnoresDependencies(t *testing.T) {
 }
 
 func connectionCount(addr string) int {
-	conn, err := net.DialTimeout("tcp", addr, 200*time.Millisecond)
+	dialer := net.Dialer{Timeout: 200 * time.Millisecond}
+	conn, err := dialer.DialContext(context.Background(), "tcp", addr)
 	if err != nil {
 		return 0
 	}
