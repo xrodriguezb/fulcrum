@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sync"
 	"testing"
 	"time"
 
@@ -28,69 +27,62 @@ import (
 // looks like.
 const defaultPostgresImage = "postgres:16-alpine"
 
-var (
-	containerOnce sync.Once
-	containerDSN  string
-	containerErr  error
-)
+var containerDSN string
 
-// postgresDSN starts one container for the whole package and returns its DSN.
-// Starting a container per test would triple the suite's runtime without
-// isolating anything that per-test schemas do not already isolate.
-func postgresDSN(t *testing.T) string {
-	t.Helper()
+// TestMain owns the container for the whole package.
+//
+// An earlier version started it lazily and registered cleanup against whichever
+// test happened to be first. That test's cleanup then terminated the container
+// while later tests were still using the connection string, which surfaced as
+// "connection refused" in an unrelated test. Ownership belongs to the package,
+// so it lives here.
+func TestMain(m *testing.M) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 
-	containerOnce.Do(func() {
-		image := os.Getenv("FULCRUM_TEST_POSTGRES_IMAGE")
-		if image == "" {
-			image = defaultPostgresImage
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-
-		container, err := tcpostgres.Run(ctx, image,
-			tcpostgres.WithDatabase("fulcrum"),
-			tcpostgres.WithUsername("fulcrum"),
-			tcpostgres.WithPassword("fulcrum"),
-			testcontainers.WithWaitStrategy(
-				wait.ForLog("database system is ready to accept connections").
-					WithOccurrence(2).
-					WithStartupTimeout(2*time.Minute),
-			),
-		)
-		if err != nil {
-			containerErr = fmt.Errorf("start postgres container: %w", err)
-			return
-		}
-
-		dsn, err := container.ConnectionString(ctx, "sslmode=disable")
-		if err != nil {
-			containerErr = fmt.Errorf("resolve connection string: %w", err)
-			return
-		}
-		containerDSN = dsn
-
-		// The container outlives every test in the package and is reaped when the
-		// test binary exits.
-		testcontainers.CleanupContainer(t, container)
-	})
-
-	if containerErr != nil {
-		t.Fatalf("postgres is not available: %v", containerErr)
+	image := os.Getenv("FULCRUM_TEST_POSTGRES_IMAGE")
+	if image == "" {
+		image = defaultPostgresImage
 	}
-	return containerDSN
+
+	container, err := tcpostgres.Run(ctx, image,
+		tcpostgres.WithDatabase("fulcrum"),
+		tcpostgres.WithUsername("fulcrum"),
+		tcpostgres.WithPassword("fulcrum"),
+		testcontainers.WithWaitStrategy(
+			wait.ForLog("database system is ready to accept connections").
+				WithOccurrence(2).
+				WithStartupTimeout(2*time.Minute),
+		),
+	)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "integration: cannot start postgres: %v\n", err)
+		os.Exit(1)
+	}
+
+	containerDSN, err = container.ConnectionString(ctx, "sslmode=disable")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "integration: cannot resolve connection string: %v\n", err)
+		_ = testcontainers.TerminateContainer(container)
+		os.Exit(1)
+	}
+
+	code := m.Run()
+
+	if termErr := testcontainers.TerminateContainer(container); termErr != nil {
+		fmt.Fprintf(os.Stderr, "integration: cannot terminate postgres: %v\n", termErr)
+	}
+	os.Exit(code)
 }
 
 // newPool returns a pool against the shared container, with the schema applied.
 func newPool(t *testing.T) *pgxpool.Pool {
 	t.Helper()
 
-	dsn := postgresDSN(t)
 	ctx := t.Context()
 
 	pool, err := postgres.NewPool(ctx, config.PostgresConfig{
-		URL:             dsn,
+		URL:             containerDSN,
 		MaxConns:        30,
 		MinConns:        2,
 		MaxConnLifetime: 10 * time.Minute,
