@@ -37,6 +37,37 @@ jobs:
           npm ci --prefix web --no-audit --fund=false
           npm audit --prefix web --omit=dev --audit-level=high
 
+  fuzz:
+    name: fuzz the untrusted parsers
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - package: ./internal/idempotency/app
+            target: FuzzFingerprintIsStableUnderReencoding
+          - package: ./internal/outbox/domain
+            target: FuzzUnmarshalWire
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: ./.github/actions/setup-go
+
+      # Fuzzing runs nightly rather than per pull request: the seed corpus runs
+      # in the normal suite, and a ten minute campaign is worth its minutes once
+      # a day rather than on every push.
+      - name: Fuzz
+        run: go test ${{ matrix.package }} -run '^$' -fuzz ${{ matrix.target }} -fuzztime 10m
+
+      - name: Upload any failing input
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: fuzz-corpus-${{ matrix.target }}
+          path: testdata/fuzz
+          if-no-files-found: ignore
+
   images:
     name: published image scan
     runs-on: ubuntu-latest
