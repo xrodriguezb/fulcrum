@@ -58,7 +58,7 @@ services:
       MIGRATION_DATABASE_URL: postgres://fulcrum:fulcrum@postgres:5432/fulcrum?sslmode=disable
       NATS_URL: nats://nats:4222
       HTTP_PORT: '8080'
-      CORS_ALLOWED_ORIGINS: http://localhost:3000
+      CORS_ALLOWED_ORIGINS: http://localhost:${FULCRUM_WEB_PORT:-3000}
       OTEL_EXPORTER: stdout
       OTEL_SAMPLE_RATIO: '1.0'
     depends_on:
@@ -73,7 +73,10 @@ services:
       retries: 20
       start_period: 3s
     ports:
-      - '8080:8080'
+      # Published ports are overridable, because 3000 and 8080 are the two most
+      # contended ports on a developer machine and a demo that cannot start is
+      # worse than a demo on an unusual port.
+      - '${FULCRUM_API_PORT:-8080}:8080'
     read_only: true
     security_opt:
       - no-new-privileges:true
@@ -132,7 +135,7 @@ services:
       retries: 20
       start_period: 2s
     ports:
-      - '3000:8080'
+      - '${FULCRUM_WEB_PORT:-3000}:8080'
     security_opt:
       - no-new-privileges:true
 
