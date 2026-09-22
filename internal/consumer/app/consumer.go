@@ -16,6 +16,7 @@ import (
 	outbox "github.com/xrodriguezb/fulcrum/internal/outbox/app"
 	outboxdomain "github.com/xrodriguezb/fulcrum/internal/outbox/domain"
 	"github.com/xrodriguezb/fulcrum/internal/platform/errs"
+	"github.com/xrodriguezb/fulcrum/internal/platform/logging"
 	"github.com/xrodriguezb/fulcrum/internal/platform/telemetry"
 )
 
@@ -254,6 +255,13 @@ func (c *Consumer) Process(ctx context.Context, message Message) {
 		return
 	}
 
+	// From here on the event's identifiers are the log context, which is what
+	// makes one order followable across the api, the publisher and this consumer.
+	ctx = logging.WithCorrelationID(ctx, envelope.CorrelationID)
+	if envelope.TraceID != "" {
+		ctx = logging.WithTraceID(ctx, envelope.TraceID)
+	}
+
 	processErr := c.tx.WithinTx(ctx, func(txCtx context.Context) error {
 		first, claimErr := c.dedup.Claim(txCtx, c.cfg.Name, envelope.ID)
 		if claimErr != nil {
@@ -273,6 +281,10 @@ func (c *Consumer) Process(ctx context.Context, message Message) {
 
 	if processErr == nil {
 		c.metrics.Processed(envelope.EventType)
+		c.logger.InfoContext(ctx, "event processed",
+			slog.String("event_id", envelope.ID),
+			slog.String("event_type", envelope.EventType),
+			slog.String("aggregate_id", envelope.AggregateID))
 		c.acknowledge(ctx, message.Ack, envelope)
 		return
 	}
