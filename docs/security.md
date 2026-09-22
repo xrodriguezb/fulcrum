@@ -47,6 +47,12 @@ and why.
 - Go services run on distroless static images as uid 65532, with a read-only root
   filesystem, no new privileges and all capabilities dropped. The console runs as
   the unprivileged nginx user.
+- The runtime profiles are off unless `PPROF_ENABLED` says otherwise, and the
+  listener binds `127.0.0.1` with no way to configure the address. A profile
+  endpoint names every goroutine, inlines the binary's symbols and lets whoever
+  reaches it run a thirty second cpu sample of a live process, so it is an
+  information leak and a denial of service in one url. It is read through an
+  exec into the container or a port forward.
 - Only the API and the console publish ports. The database and the broker are
   reachable only inside the compose network.
 - No secrets in the repository. `.env.example` carries placeholders, and
