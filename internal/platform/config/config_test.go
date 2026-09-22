@@ -98,6 +98,11 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 			set:    map[string]string{"CONSUMER_RETRY_BASE": "5s", "CONSUMER_RETRY_CAP": "1s"},
 			wantIn: "CONSUMER_RETRY_CAP",
 		},
+		{
+			name:   "claim lease shorter than a publish",
+			set:    map[string]string{"OUTBOX_CLAIM_LEASE": "2s", "NATS_PUBLISH_TIMEOUT": "5s"},
+			wantIn: "OUTBOX_CLAIM_LEASE",
+		},
 	}
 
 	for _, tc := range cases {
@@ -142,6 +147,10 @@ func TestLoadAppliesDefaults(t *testing.T) {
 	}
 	if cfg.Outbox.Workers <= 0 || cfg.Outbox.BatchSize <= 0 {
 		t.Errorf("outbox defaults must be positive, got %+v", cfg.Outbox)
+	}
+	if cfg.Outbox.ClaimLease <= cfg.NATS.PublishTimeout {
+		t.Errorf("the default claim lease %v must outlast the default publish timeout %v",
+			cfg.Outbox.ClaimLease, cfg.NATS.PublishTimeout)
 	}
 	if cfg.Consumer.MaxAttempts <= 0 {
 		t.Errorf("Consumer.MaxAttempts must have a non-zero default")
