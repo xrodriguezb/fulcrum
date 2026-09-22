@@ -44,6 +44,14 @@ type Config struct {
 	Consumer    ConsumerConfig
 	Idempotency IdempotencyConfig
 	Telemetry   TelemetryConfig
+	Profiling   ProfilingConfig
+}
+
+// ProfilingConfig decides whether the runtime profiles are served. It is not
+// read yet.
+type ProfilingConfig struct {
+	Enabled bool
+	Port    int
 }
 
 // HTTPConfig configures the API server. Every timeout is explicit because the

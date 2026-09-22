@@ -231,3 +231,55 @@ func TestLoadErrorNeverEchoesValues(t *testing.T) {
 		t.Errorf("configuration error echoed the offending value: %q", err.Error())
 	}
 }
+
+// Profiling is off unless it is asked for, and its port has to be its own: two
+// listeners on one port in one process is a startup failure that would only
+// show up when profiling is switched on, which is exactly when nobody wants a
+// second problem.
+func TestProfilingIsDisabledByDefault(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := config.Load(lookupFrom(valid()))
+	if err != nil {
+		t.Fatalf("Load returned %v", err)
+	}
+	if cfg.Profiling.Enabled {
+		t.Errorf("profiling is enabled without being asked for")
+	}
+	if cfg.Profiling.Port != 6060 {
+		t.Errorf("the default profiling port is %d, want 6060", cfg.Profiling.Port)
+	}
+}
+
+func TestProfilingPortMustNotCollide(t *testing.T) {
+	t.Parallel()
+
+	env := valid()
+	env["PPROF_ENABLED"] = "true"
+	env["HTTP_PORT"] = "8080"
+	env["PPROF_PORT"] = "8080"
+
+	_, err := config.Load(lookupFrom(env))
+	if err == nil {
+		t.Fatalf("a profiling port equal to the http port was accepted")
+	}
+	if !strings.Contains(err.Error(), "PPROF_PORT") {
+		t.Errorf("the failure does not name the offending variable: %v", err)
+	}
+}
+
+func TestProfilingReadsItsSettings(t *testing.T) {
+	t.Parallel()
+
+	env := valid()
+	env["PPROF_ENABLED"] = "true"
+	env["PPROF_PORT"] = "7070"
+
+	cfg, err := config.Load(lookupFrom(env))
+	if err != nil {
+		t.Fatalf("Load returned %v", err)
+	}
+	if !cfg.Profiling.Enabled || cfg.Profiling.Port != 7070 {
+		t.Errorf("profiling read as %+v", cfg.Profiling)
+	}
+}
