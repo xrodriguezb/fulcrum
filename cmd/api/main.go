@@ -55,7 +55,7 @@ func run() error {
 	}
 	defer pool.Close()
 
-	if migrateErr := postgres.Migrate(ctx, pool); migrateErr != nil {
+	if migrateErr := postgres.MigrateWithDSN(ctx, cfg.Postgres, cfg.MigrationDSN()); migrateErr != nil {
 		return fmt.Errorf("apply migrations: %w", migrateErr)
 	}
 	logger.InfoContext(ctx, "schema is up to date")
