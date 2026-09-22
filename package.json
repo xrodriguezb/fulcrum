@@ -1,0 +1,13 @@
+{
+  "name": "fulcrum-repo-tooling",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Repository level tooling only. The application frontend lives in web/.",
+  "scripts": {
+    "commitlint": "commitlint"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.6.1",
+    "@commitlint/config-conventional": "^19.6.0"
+  }
+}
