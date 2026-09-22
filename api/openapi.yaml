@@ -511,6 +511,7 @@ components:
             - IDEMPOTENCY_KEY_REQUIRED
             - IDEMPOTENCY_KEY_REUSE
             - IDEMPOTENCY_REQUEST_IN_PROGRESS
+            - METHOD_NOT_ALLOWED
             - REQUEST_TOO_LARGE
             - UNSUPPORTED_MEDIA_TYPE
             - SERVICE_UNAVAILABLE

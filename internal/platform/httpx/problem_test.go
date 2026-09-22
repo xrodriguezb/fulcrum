@@ -157,3 +157,57 @@ func TestRetryAfterIsSetForAnInFlightDuplicate(t *testing.T) {
 type discard struct{}
 
 func (discard) Write(p []byte) (int, error) { return len(p), nil }
+
+// Routing is the one place where an API usually stops speaking its own error
+// contract: the router answers with plain text and every client has to special
+// case it.
+func TestRoutingRejectionsAreProblemDocuments(t *testing.T) {
+	t.Parallel()
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/orders", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	mux.HandleFunc("GET /api/v1/gone", func(w http.ResponseWriter, r *http.Request) {
+		httpx.WriteProblem(w, r, errs.NotFound(errs.CodeOrderNotFound, "The order does not exist.", nil),
+			logging.NewJSON(discard{}, 0))
+	})
+
+	handler := httpx.RoutingProblems(logging.NewJSON(discard{}, 0))(mux)
+
+	cases := []struct {
+		name       string
+		method     string
+		path       string
+		wantStatus int
+		wantCode   string
+	}{
+		{name: "unknown path", method: http.MethodGet, path: "/api/v1/nope", wantStatus: http.StatusNotFound, wantCode: errs.CodeValidationFailed},
+		{name: "wrong method", method: http.MethodDelete, path: "/api/v1/orders", wantStatus: http.StatusMethodNotAllowed, wantCode: errs.CodeMethodNotAllowed},
+		{name: "handler not found is left alone", method: http.MethodGet, path: "/api/v1/gone", wantStatus: http.StatusNotFound, wantCode: errs.CodeOrderNotFound},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequestWithContext(t.Context(), tc.method, tc.path, nil)
+			handler.ServeHTTP(recorder, request)
+
+			if recorder.Code != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", recorder.Code, tc.wantStatus)
+			}
+			problem := decodeProblem(t, recorder)
+			if problem["code"] != tc.wantCode {
+				t.Errorf("code = %v, want %v", problem["code"], tc.wantCode)
+			}
+		})
+	}
+
+	// A matched route still answers normally.
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/orders", nil))
+	if recorder.Code != http.StatusOK {
+		t.Errorf("a matched route returned %d, want 200", recorder.Code)
+	}
+}

@@ -108,6 +108,8 @@ func title(code string, status int) string {
 		return "Idempotency key reused"
 	case errs.CodeIdempotencyInProgress:
 		return "Request in progress"
+	case errs.CodeMethodNotAllowed:
+		return "Method not allowed"
 	case errs.CodeRequestTooLarge:
 		return "Request too large"
 	case errs.CodeUnsupportedMediaType:

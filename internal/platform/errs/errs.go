@@ -26,6 +26,8 @@ const (
 	KindConflict
 	// KindPrecondition means a required state was not met before the operation.
 	KindPrecondition
+	// KindMethodNotAllowed means the path exists but not for this method.
+	KindMethodNotAllowed
 	// KindUnsupported means the request format or media type is not accepted.
 	KindUnsupported
 	// KindTooLarge means the request exceeded a declared limit.
@@ -50,6 +52,7 @@ const (
 	CodeIdempotencyKeyRequired   = "IDEMPOTENCY_KEY_REQUIRED"
 	CodeIdempotencyKeyReuse      = "IDEMPOTENCY_KEY_REUSE"
 	CodeIdempotencyInProgress    = "IDEMPOTENCY_REQUEST_IN_PROGRESS"
+	CodeMethodNotAllowed         = "METHOD_NOT_ALLOWED"
 	CodeRequestTooLarge          = "REQUEST_TOO_LARGE"
 	CodeUnsupportedMediaType     = "UNSUPPORTED_MEDIA_TYPE"
 	CodeInternal                 = "INTERNAL_ERROR"
@@ -78,6 +81,8 @@ func (k Kind) String() string {
 		return "conflict"
 	case KindPrecondition:
 		return "precondition"
+	case KindMethodNotAllowed:
+		return "method_not_allowed"
 	case KindUnsupported:
 		return "unsupported"
 	case KindTooLarge:
@@ -98,7 +103,8 @@ func (k Kind) String() string {
 func AllKinds() []Kind {
 	return []Kind{
 		KindNone, KindValidation, KindNotFound, KindConflict, KindPrecondition,
-		KindUnsupported, KindTooLarge, KindTimeout, KindUnavailable, KindInternal,
+		KindMethodNotAllowed, KindUnsupported, KindTooLarge, KindTimeout,
+		KindUnavailable, KindInternal,
 	}
 }
 
@@ -180,7 +186,7 @@ func IsTransient(err error) bool {
 	case KindTimeout, KindUnavailable:
 		return true
 	case KindNone, KindValidation, KindNotFound, KindConflict, KindPrecondition,
-		KindUnsupported, KindTooLarge, KindInternal:
+		KindMethodNotAllowed, KindUnsupported, KindTooLarge, KindInternal:
 		return false
 	default:
 		return false
@@ -200,6 +206,8 @@ func HTTPStatus(kind Kind) int {
 		return http.StatusConflict
 	case KindPrecondition:
 		return http.StatusUnprocessableEntity
+	case KindMethodNotAllowed:
+		return http.StatusMethodNotAllowed
 	case KindUnsupported:
 		return http.StatusUnsupportedMediaType
 	case KindTooLarge:
