@@ -40,6 +40,7 @@ func newAPI(t *testing.T, checks ...httpx.Check) apiHarness {
 	pool := newPool(t)
 	manager := postgres.NewTxManager(pool)
 	logger := logging.NewJSON(io.Discard, 0)
+	registry := prometheus.NewRegistry()
 
 	creator, err := orderapp.NewCreateOrderHandler(orderapp.CreateOrderDeps{
 		Tx:           manager,
@@ -51,12 +52,12 @@ func newAPI(t *testing.T, checks ...httpx.Check) apiHarness {
 		IDs:          &sequentialIDs{},
 		KeyTTL:       time.Hour,
 		MaxKeyLength: 255,
+		Metrics:      orderinfra.NewMetrics(registry),
 	})
 	if err != nil {
 		t.Fatalf("wire the use case: %v", err)
 	}
 
-	registry := prometheus.NewRegistry()
 	chain, err := httpx.Chain(httpx.MiddlewareConfig{
 		Logger:         logger,
 		Metrics:        httpx.NewMetrics(registry),
@@ -377,4 +378,40 @@ func queryCount(t *testing.T, pool *pgxpool.Pool) int64 {
 		t.Fatalf("read statement counter: %v", err)
 	}
 	return count
+}
+
+// The business metrics answer questions the transport metrics cannot: how many
+// orders exist, how often stock ran out, and how keyed requests were answered.
+// A 409 counted by http_requests_total does not distinguish a sold out sku from
+// a client reusing a key.
+func TestBusinessMetricsAreExposed(t *testing.T) {
+	h := newAPI(t)
+	seedInventory(t, h.pool, "WIDGET-001", 2, 1050)
+
+	headers := map[string]string{"Content-Type": "application/json", "Idempotency-Key": "metrics-1"}
+	if created := h.do(t, http.MethodPost, "/api/v1/orders", orderBody, headers); created.Status != http.StatusCreated {
+		t.Fatalf("create: status %d (%s)", created.Status, created.Body)
+	}
+	// The same key again: a replay, not a second order.
+	h.do(t, http.MethodPost, "/api/v1/orders", orderBody, headers)
+
+	// Two units are gone, so this one cannot be satisfied.
+	conflict := h.do(t, http.MethodPost, "/api/v1/orders", orderBody,
+		map[string]string{"Content-Type": "application/json", "Idempotency-Key": "metrics-2"})
+	if conflict.Status != http.StatusConflict {
+		t.Fatalf("expected a conflict, got %d (%s)", conflict.Status, conflict.Body)
+	}
+
+	metrics := h.do(t, http.MethodGet, "/metrics", "", nil).Body
+
+	for _, want := range []string{
+		"orders_created_total 1",
+		"inventory_conflicts_total 1",
+		`idempotency_hits_total{outcome="claimed"} 2`,
+		`idempotency_hits_total{outcome="replayed"} 1`,
+	} {
+		if !strings.Contains(metrics, want) {
+			t.Errorf("the metrics endpoint does not expose %q", want)
+		}
+	}
 }

@@ -84,6 +84,9 @@ func run() error {
 	orders := orderinfra.NewRepository(txManager)
 	outbox := outboxinfra.NewWriter(txManager)
 
+	registry := prometheus.NewRegistry()
+	registry.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
+
 	creator, err := orderapp.NewCreateOrderHandler(orderapp.CreateOrderDeps{
 		Tx:           txManager,
 		Orders:       orders,
@@ -94,13 +97,11 @@ func run() error {
 		IDs:          idgen.UUID{},
 		KeyTTL:       cfg.Idempotency.TTL,
 		MaxKeyLength: cfg.Idempotency.MaxKeyLength,
+		Metrics:      orderinfra.NewMetrics(registry),
 	})
 	if err != nil {
 		return fmt.Errorf("wire the create order use case: %w", err)
 	}
-
-	registry := prometheus.NewRegistry()
-	registry.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
 	chain, err := httpx.Chain(httpx.MiddlewareConfig{
 		Logger:         logger,

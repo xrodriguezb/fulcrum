@@ -83,6 +83,9 @@ routing them through the API would mean the API reporting on work it does not do
 http_requests_total{route,method,status}
 http_request_duration_seconds{route,method}
 http_requests_in_flight
+orders_created_total
+inventory_conflicts_total
+idempotency_hits_total{outcome}
 outbox_pending_total
 outbox_failing_total
 outbox_oldest_unpublished_seconds
@@ -115,6 +118,11 @@ What was deliberately rejected:
   the taxonomy, which is a closed set of ten values.
 - **Idempotency key as a label on the idempotency metrics.** The outcome is
   labelled, the key is not.
+
+The business counters exist separately from the transport ones because
+`http_requests_total` cannot answer the questions an operator actually asks. A
+409 counted there is a sold out sku and a reused idempotency key in the same
+bucket, and those two mean opposite things.
 
 `outbox_oldest_unpublished_seconds` is the single most useful number here: it
 answers whether publication is keeping up, which neither a rate nor a count does.
