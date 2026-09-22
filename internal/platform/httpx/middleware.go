@@ -11,8 +11,15 @@ import (
 	"time"
 	"unicode"
 
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/xrodriguezb/fulcrum/internal/platform/errs"
 	"github.com/xrodriguezb/fulcrum/internal/platform/logging"
+	"github.com/xrodriguezb/fulcrum/internal/platform/telemetry"
 )
 
 // maxClientIdentifierLength bounds what a caller can put into a log field. A
@@ -58,6 +65,7 @@ func Chain(cfg MiddlewareConfig) (Middleware, error) {
 
 	middlewares := []Middleware{
 		recovery(cfg.Logger),
+		tracing(),
 		identifiers(),
 		observability(cfg.Logger, cfg.Metrics),
 		bodyLimit(cfg.MaxBodyBytes, cfg.Logger),
@@ -96,6 +104,40 @@ func recovery(logger *slog.Logger) Middleware {
 	}
 }
 
+// tracing starts a server span per request and joins an incoming trace when the
+// caller sent one.
+//
+// It sits above the identifier middleware so that the trace id the span
+// generates is the one every log line below it carries.
+func tracing() Middleware {
+	tracer := telemetry.Tracer("fulcrum/http")
+
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := otel.GetTextMapPropagator().Extract(r.Context(), propagation.HeaderCarrier(r.Header))
+
+			// The span name is the route pattern rather than the path, for the
+			// same reason the metric label is: a span named after an order id
+			// makes every trace unique and every aggregation useless.
+			ctx, span := tracer.Start(ctx, r.Method+" "+routeLabel(r),
+				trace.WithSpanKind(trace.SpanKindServer),
+				trace.WithAttributes(
+					attribute.String("http.request.method", r.Method),
+					attribute.String("http.route", routeLabel(r)),
+				))
+			defer span.End()
+
+			recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+			next.ServeHTTP(recorder, r.WithContext(ctx))
+
+			span.SetAttributes(attribute.Int("http.response.status_code", recorder.status))
+			if recorder.status >= http.StatusInternalServerError {
+				span.SetStatus(codes.Error, http.StatusText(recorder.status))
+			}
+		})
+	}
+}
+
 func identifiers() Middleware {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -109,7 +151,12 @@ func identifiers() Middleware {
 
 			ctx := logging.WithRequestID(r.Context(), requestID)
 			ctx = logging.WithCorrelationID(ctx, correlationID)
-			if traceID := safeIdentifier(r.Header.Get("X-Trace-Id")); traceID != "" {
+			// The active span's trace id wins: it is the one an operator will
+			// find in a trace backend. A client supplied header is only a
+			// fallback for a deployment with tracing switched off.
+			if traceID := telemetry.TraceIDFrom(ctx); traceID != "" {
+				ctx = logging.WithTraceID(ctx, traceID)
+			} else if traceID := safeIdentifier(r.Header.Get("X-Trace-Id")); traceID != "" {
 				ctx = logging.WithTraceID(ctx, traceID)
 			}
 

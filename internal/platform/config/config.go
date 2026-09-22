@@ -68,7 +68,13 @@ type WorkerConfig struct {
 
 // PostgresConfig configures the connection pool.
 type PostgresConfig struct {
-	URL             string
+	URL string
+	// MigrationURL is the connection used once at startup to apply migrations.
+	// It is separate because applying a migration needs rights the request path
+	// must not have: the application role can read and write rows and nothing
+	// else. When it is unset the application url is used, which is what a local
+	// developer wants and what a production deployment should override.
+	MigrationURL    string
 	MaxConns        int32
 	MinConns        int32
 	MaxConnLifetime time.Duration
@@ -130,6 +136,14 @@ type TelemetryConfig struct {
 	SampleRatio    float64
 }
 
+// MigrationDSN returns the connection string migrations should use.
+func (c Config) MigrationDSN() string {
+	if strings.TrimSpace(c.Postgres.MigrationURL) != "" {
+		return c.Postgres.MigrationURL
+	}
+	return c.Postgres.URL
+}
+
 // IsDevelopment reports whether relaxed development behaviour applies.
 func (c Config) IsDevelopment() bool { return c.Env == EnvDevelopment }
 
@@ -170,6 +184,7 @@ func Load(lookup LookupFunc) (Config, error) {
 
 	cfg.Postgres = PostgresConfig{
 		URL:             requiredString(lookup, "DATABASE_URL", &c),
+		MigrationURL:    stringValue(lookup, "MIGRATION_DATABASE_URL", ""),
 		MaxConns:        poolSize(lookup, "POSTGRES_MAX_CONNS", 10, &c),
 		MinConns:        poolSize(lookup, "POSTGRES_MIN_CONNS", 2, &c),
 		MaxConnLifetime: duration(lookup, "POSTGRES_MAX_CONN_LIFETIME", time.Hour, &c),

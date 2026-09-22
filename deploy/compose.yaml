@@ -1,0 +1,144 @@
+name: fulcrum
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fulcrum
+      POSTGRES_PASSWORD: fulcrum
+      POSTGRES_DB: fulcrum
+      # Fail fast on a mistyped password rather than trusting the local network.
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # pg_isready answers only when the server accepts connections, which is
+      # what dependent services actually need. A sleep would answer earlier and
+      # be wrong.
+      test: ['CMD-SHELL', 'pg_isready -U fulcrum -d fulcrum']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    # The database port is not published. Nothing outside the stack needs it, and
+    # publishing it is how a development database ends up reachable from a
+    # network it was never meant to be on.
+    expose:
+      - '5432'
+
+  nats:
+    image: nats:2.10-alpine
+    command: ['--jetstream', '--store_dir=/data', '--http_port=8222']
+    volumes:
+      - nats-data:/data
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:8222/healthz']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+    expose:
+      - '4222'
+      - '8222'
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/service.Dockerfile
+      args:
+        BINARY: api
+    environment:
+      FULCRUM_ENV: development
+      LOG_LEVEL: info
+      SERVICE_NAME: fulcrum-api
+      DATABASE_URL: postgres://fulcrum_app:fulcrum_app_password@postgres:5432/fulcrum?sslmode=disable
+      # Migrations need rights the request path must not have. See
+      # deploy/postgres/10-app-role.sql.
+      MIGRATION_DATABASE_URL: postgres://fulcrum:fulcrum@postgres:5432/fulcrum?sslmode=disable
+      NATS_URL: nats://nats:4222
+      HTTP_PORT: '8080'
+      CORS_ALLOWED_ORIGINS: http://localhost:${FULCRUM_WEB_PORT:-3000}
+      OTEL_EXPORTER: stdout
+      OTEL_SAMPLE_RATIO: '1.0'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', '/healthcheck', 'http://127.0.0.1:8080/readyz']
+      interval: 3s
+      timeout: 4s
+      retries: 20
+      start_period: 3s
+    ports:
+      # Published ports are overridable, because 3000 and 8080 are the two most
+      # contended ports on a developer machine and a demo that cannot start is
+      # worse than a demo on an unusual port.
+      - '${FULCRUM_API_PORT:-8080}:8080'
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  worker:
+    build:
+      context: ..
+      dockerfile: deploy/service.Dockerfile
+      args:
+        BINARY: worker
+    environment:
+      FULCRUM_ENV: development
+      LOG_LEVEL: info
+      SERVICE_NAME: fulcrum-worker
+      DATABASE_URL: postgres://fulcrum_app:fulcrum_app_password@postgres:5432/fulcrum?sslmode=disable
+      NATS_URL: nats://nats:4222
+      WORKER_METRICS_PORT: '8081'
+      OUTBOX_WORKERS: '4'
+      OUTBOX_BATCH_SIZE: '100'
+      OTEL_EXPORTER: stdout
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      # The worker does not migrate, so it waits for the api to have done it.
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', '/healthcheck', 'http://127.0.0.1:8081/readyz']
+      interval: 3s
+      timeout: 4s
+      retries: 20
+      start_period: 3s
+    expose:
+      - '8081'
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ['CMD', 'wget', '--spider', '-q', 'http://127.0.0.1:8080/']
+      interval: 3s
+      timeout: 4s
+      retries: 20
+      start_period: 2s
+    ports:
+      - '${FULCRUM_WEB_PORT:-3000}:8080'
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  postgres-data:
+  nats-data:

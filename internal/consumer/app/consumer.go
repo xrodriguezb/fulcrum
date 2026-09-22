@@ -10,9 +10,14 @@ import (
 	"log/slog"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	outbox "github.com/xrodriguezb/fulcrum/internal/outbox/app"
 	outboxdomain "github.com/xrodriguezb/fulcrum/internal/outbox/domain"
 	"github.com/xrodriguezb/fulcrum/internal/platform/errs"
+	"github.com/xrodriguezb/fulcrum/internal/platform/logging"
+	"github.com/xrodriguezb/fulcrum/internal/platform/telemetry"
 )
 
 // Message is one delivery from the broker, still undecoded.
@@ -24,6 +29,9 @@ type Message struct {
 	Payload    []byte
 	Deliveries int
 	Ack        Acker
+	// Context carries the trace the producer started, when the transport could
+	// extract one. It is nil for a transport that does not propagate.
+	Context context.Context //nolint:containedctx // the trace context belongs to the message, not to the call
 }
 
 // Acker is how the consumer tells the broker what happened.
@@ -220,6 +228,18 @@ func (c *Consumer) Run(ctx context.Context) error {
 // unanswered is redelivered after the acknowledgement wait, which looks like a
 // hang rather than a failure.
 func (c *Consumer) Process(ctx context.Context, message Message) {
+	// The producer's trace continues here, while cancellation stays with the
+	// caller's context: the message context describes a trace, not a lifetime.
+	// Only the span context is copied across, never the context itself.
+	if spanCtx := spanContextOf(message); spanCtx.IsValid() {
+		ctx = trace.ContextWithSpanContext(ctx, spanCtx)
+	}
+
+	ctx, span := telemetry.Tracer("fulcrum/consumer").Start(ctx, "consume",
+		trace.WithSpanKind(trace.SpanKindConsumer),
+		trace.WithAttributes(attribute.Int("messaging.nats.deliveries", message.Deliveries)))
+	defer span.End()
+
 	envelope, err := outboxdomain.UnmarshalWire(message.Payload)
 	if err != nil {
 		// A payload the consumer cannot read will never become readable. It goes
@@ -233,6 +253,13 @@ func (c *Consumer) Process(ctx context.Context, message Message) {
 			terminateErr: err,
 		}, message.Ack)
 		return
+	}
+
+	// From here on the event's identifiers are the log context, which is what
+	// makes one order followable across the api, the publisher and this consumer.
+	ctx = logging.WithCorrelationID(ctx, envelope.CorrelationID)
+	if envelope.TraceID != "" {
+		ctx = logging.WithTraceID(ctx, envelope.TraceID)
 	}
 
 	processErr := c.tx.WithinTx(ctx, func(txCtx context.Context) error {
@@ -254,6 +281,10 @@ func (c *Consumer) Process(ctx context.Context, message Message) {
 
 	if processErr == nil {
 		c.metrics.Processed(envelope.EventType)
+		c.logger.InfoContext(ctx, "event processed",
+			slog.String("event_id", envelope.ID),
+			slog.String("event_type", envelope.EventType),
+			slog.String("aggregate_id", envelope.AggregateID))
 		c.acknowledge(ctx, message.Ack, envelope)
 		return
 	}
@@ -404,6 +435,15 @@ func describeFailure(err error, transient, exhausted bool) string {
 	default:
 		return fmt.Sprintf("The event could not be processed (%s).", code)
 	}
+}
+
+// spanContextOf reads the producer's span context from a message, if it carries
+// one.
+func spanContextOf(message Message) trace.SpanContext {
+	if message.Context == nil {
+		return trace.SpanContext{}
+	}
+	return trace.SpanContextFromContext(message.Context)
 }
 
 // isCancellation reports whether the failure is the shutdown rather than the

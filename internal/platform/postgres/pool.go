@@ -46,6 +46,29 @@ func NewPool(ctx context.Context, cfg config.PostgresConfig) (*pgxpool.Pool, err
 	return pool, nil
 }
 
+// MigrateWithDSN applies the migration set on a connection of its own, opened
+// with the given connection string.
+//
+// Migrations run as a role that may change the schema, while the request path
+// runs as a role that may not. Sharing the application pool would mean granting
+// those rights to every request.
+func MigrateWithDSN(ctx context.Context, cfg config.PostgresConfig, dsn string) error {
+	migrationCfg := cfg
+	migrationCfg.URL = dsn
+	// One connection is enough: the runner holds an advisory lock for the whole
+	// run, so a pool would only add idle connections.
+	migrationCfg.MaxConns = 2
+	migrationCfg.MinConns = 1
+
+	pool, err := NewPool(ctx, migrationCfg)
+	if err != nil {
+		return err
+	}
+	defer pool.Close()
+
+	return Migrate(ctx, pool)
+}
+
 // Migrate applies the embedded migration set using a dedicated connection from
 // the pool, so the advisory lock is held by one session for the whole run.
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {

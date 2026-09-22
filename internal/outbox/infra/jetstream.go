@@ -8,10 +8,16 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/xrodriguezb/fulcrum/internal/outbox/domain"
 	"github.com/xrodriguezb/fulcrum/internal/platform/config"
 	"github.com/xrodriguezb/fulcrum/internal/platform/errs"
+	"github.com/xrodriguezb/fulcrum/internal/platform/telemetry"
 )
 
 // msgIDHeader lets the broker reject a duplicate of a message it already has.
@@ -66,6 +72,15 @@ func EnsureStream(ctx context.Context, conn *nats.Conn, cfg config.NATSConfig) (
 // Waiting for the acknowledgement is the whole point: a fire and forget publish
 // would let the publisher mark a row published that the broker never stored.
 func (p *JetStreamPublisher) Publish(ctx context.Context, envelope domain.Envelope) error {
+	ctx, span := telemetry.Tracer("fulcrum/outbox").Start(ctx, "publish "+envelope.EventType,
+		trace.WithSpanKind(trace.SpanKindProducer),
+		trace.WithAttributes(
+			attribute.String("messaging.system", "nats"),
+			attribute.String("messaging.destination.name", envelope.Subject(p.subject)),
+			attribute.String("event.type", envelope.EventType),
+		))
+	defer span.End()
+
 	payload, err := envelope.MarshalWire()
 	if err != nil {
 		// A malformed envelope is permanent. Retrying it forever would be a
@@ -87,6 +102,10 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, envelope domain.Envelo
 		message.Header.Set("X-Trace-Id", envelope.TraceID)
 	}
 
+	// The trace continues into the consumer through the standard header, so one
+	// order can be followed across three processes in a trace backend.
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(message.Header))
+
 	publishCtx := ctx
 	if p.timeout > 0 {
 		var cancel context.CancelFunc
@@ -95,6 +114,8 @@ func (p *JetStreamPublisher) Publish(ctx context.Context, envelope domain.Envelo
 	}
 
 	if _, err := p.stream.PublishMsg(publishCtx, message); err != nil {
+		span.RecordError(err)
+		span.SetStatus(codes.Error, "publish failed")
 		if errors.Is(err, context.DeadlineExceeded) {
 			return errs.Timeout("the broker did not acknowledge the publish", err)
 		}

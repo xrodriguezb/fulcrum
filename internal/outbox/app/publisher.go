@@ -10,6 +10,7 @@ import (
 
 	"github.com/xrodriguezb/fulcrum/internal/outbox/domain"
 	"github.com/xrodriguezb/fulcrum/internal/platform/errs"
+	"github.com/xrodriguezb/fulcrum/internal/platform/logging"
 )
 
 // Claimed is one event taken from the outbox, with the attempt count the claim
@@ -216,6 +217,14 @@ func (p *Publisher) work(ctx context.Context, work <-chan Claimed) {
 
 // publish sends one event and records the outcome.
 func (p *Publisher) publish(ctx context.Context, claimed Claimed) {
+	// The event's identifiers become the log context, so a publish line can be
+	// joined to the request that produced the event and to the consumer that
+	// processed it.
+	ctx = logging.WithCorrelationID(ctx, claimed.Envelope.CorrelationID)
+	if claimed.Envelope.TraceID != "" {
+		ctx = logging.WithTraceID(ctx, claimed.Envelope.TraceID)
+	}
+
 	// The publish itself is bounded but does not inherit cancellation: a
 	// shutdown must not abort a publish that is already in flight, because the
 	// broker may have accepted it and the row would then be marked failed.
@@ -241,6 +250,10 @@ func (p *Publisher) publish(ctx context.Context, claimed Claimed) {
 		return
 	}
 	p.metrics.PublishSucceeded()
+	p.logger.InfoContext(markCtx, "event published",
+		slog.String("event_id", claimed.Envelope.ID),
+		slog.String("event_type", claimed.Envelope.EventType),
+		slog.String("aggregate_id", claimed.Envelope.AggregateID))
 }
 
 func (p *Publisher) recordFailure(ctx context.Context, claimed Claimed, cause error) {

@@ -1,0 +1,72 @@
+name: nightly
+
+# A vulnerability disclosed after a merge is still a vulnerability in the image
+# that is running. This is the check most repositories skip, and it is the one
+# that catches the advisories nobody merged code for.
+on:
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    name: dependency advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: ./.github/actions/setup-go
+        with:
+          install-tools: 'true'
+
+      - name: Go vulnerabilities
+        run: govulncheck ./...
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Web dependencies
+        run: |
+          set -euo pipefail
+          npm ci --prefix web --no-audit --fund=false
+          npm audit --prefix web --omit=dev --audit-level=high
+
+  images:
+    name: published image scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        image: [api, worker, web]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Scan the published image
+        uses: aquasecurity/trivy-action@d2a0b60797ff03db6132bd4e2b293f9b37081297 # master
+        with:
+          scan-type: image
+          image-ref: ghcr.io/${{ github.repository }}/${{ matrix.image }}:latest
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+        continue-on-error: true
+        id: scan
+
+      - name: Record the result
+        run: |
+          {
+            echo "### ${{ matrix.image }}"
+            echo ""
+            echo "scan outcome: ${{ steps.scan.outcome }}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.scan.outcome }}" = "failure" ]; then
+            echo "the published image has unfixed high or critical advisories"
+            exit 1
+          fi

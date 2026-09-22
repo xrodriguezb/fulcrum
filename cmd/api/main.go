@@ -27,6 +27,7 @@ import (
 	"github.com/xrodriguezb/fulcrum/internal/platform/logging"
 	"github.com/xrodriguezb/fulcrum/internal/platform/messaging"
 	"github.com/xrodriguezb/fulcrum/internal/platform/postgres"
+	"github.com/xrodriguezb/fulcrum/internal/platform/telemetry"
 )
 
 func main() {
@@ -49,13 +50,25 @@ func run() error {
 
 	logger := logging.New(cfg)
 
-	pool, err := postgres.NewPool(ctx, cfg.Postgres)
+	shutdownTracing, err := telemetry.Setup(ctx, cfg)
 	if err != nil {
-		return fmt.Errorf("connect to postgres: %w", err)
+		return fmt.Errorf("set up tracing: %w", err)
+	}
+	defer func() {
+		// Flushing runs on a context cancellation cannot reach: the spans
+		// describing the shutdown are the ones worth keeping.
+		if flushErr := shutdownTracing(context.WithoutCancel(ctx)); flushErr != nil {
+			logger.WarnContext(context.WithoutCancel(ctx), "cannot flush traces", "error", flushErr)
+		}
+	}()
+
+	pool, poolErr := postgres.NewPool(ctx, cfg.Postgres)
+	if poolErr != nil {
+		return fmt.Errorf("connect to postgres: %w", poolErr)
 	}
 	defer pool.Close()
 
-	if migrateErr := postgres.Migrate(ctx, pool); migrateErr != nil {
+	if migrateErr := postgres.MigrateWithDSN(ctx, cfg.Postgres, cfg.MigrationDSN()); migrateErr != nil {
 		return fmt.Errorf("apply migrations: %w", migrateErr)
 	}
 	logger.InfoContext(ctx, "schema is up to date")

@@ -19,14 +19,20 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/sync/errgroup"
 
+	consumerapp "github.com/xrodriguezb/fulcrum/internal/consumer/app"
+	consumerinfra "github.com/xrodriguezb/fulcrum/internal/consumer/infra"
 	idempotencyinfra "github.com/xrodriguezb/fulcrum/internal/idempotency/infra"
+	orderapp "github.com/xrodriguezb/fulcrum/internal/order/app"
+	orderinfra "github.com/xrodriguezb/fulcrum/internal/order/infra"
 	outboxapp "github.com/xrodriguezb/fulcrum/internal/outbox/app"
 	outboxinfra "github.com/xrodriguezb/fulcrum/internal/outbox/infra"
 	"github.com/xrodriguezb/fulcrum/internal/platform/config"
 	"github.com/xrodriguezb/fulcrum/internal/platform/httpx"
+	"github.com/xrodriguezb/fulcrum/internal/platform/idgen"
 	"github.com/xrodriguezb/fulcrum/internal/platform/logging"
 	"github.com/xrodriguezb/fulcrum/internal/platform/messaging"
 	"github.com/xrodriguezb/fulcrum/internal/platform/postgres"
+	"github.com/xrodriguezb/fulcrum/internal/platform/telemetry"
 )
 
 func main() {
@@ -46,6 +52,18 @@ func run() error {
 	}
 
 	logger := logging.New(cfg)
+
+	shutdownTracing, err := telemetry.Setup(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("set up tracing: %w", err)
+	}
+	defer func() {
+		// Flushing runs on a context cancellation cannot reach: the spans
+		// describing the shutdown are the ones worth keeping.
+		if flushErr := shutdownTracing(context.WithoutCancel(ctx)); flushErr != nil {
+			logger.WarnContext(context.WithoutCancel(ctx), "cannot flush traces", "error", flushErr)
+		}
+	}()
 
 	// The worker never migrates. Two services racing to change the schema is a
 	// failure mode with no upside, so the API owns it.
@@ -87,6 +105,11 @@ func run() error {
 		return fmt.Errorf("wire the publisher: %w", err)
 	}
 
+	consumer, err := buildConsumer(ctx, cfg, txManager, broker, logger, registry)
+	if err != nil {
+		return err
+	}
+
 	group, groupCtx := errgroup.WithContext(ctx)
 
 	group.Go(func() error {
@@ -94,6 +117,11 @@ func run() error {
 			slog.Int("workers", cfg.Outbox.Workers),
 			slog.Int("batch_size", cfg.Outbox.BatchSize))
 		return publisher.Run(groupCtx)
+	})
+
+	group.Go(func() error {
+		logger.InfoContext(groupCtx, "event consumer started", slog.String("consumer", cfg.Consumer.Name))
+		return consumer.Run(groupCtx)
 	})
 
 	group.Go(func() error {
@@ -109,6 +137,48 @@ func run() error {
 	}
 	logger.InfoContext(context.WithoutCancel(ctx), "worker stopped")
 	return nil
+}
+
+// buildConsumer wires the event consumer and the side effect it performs.
+func buildConsumer(
+	ctx context.Context,
+	cfg config.Config,
+	txManager *postgres.TxManager,
+	broker *messaging.Client,
+	logger *slog.Logger,
+	registry *prometheus.Registry,
+) (*consumerapp.Consumer, error) {
+	source, err := consumerinfra.NewSource(ctx, broker.Conn(), cfg.NATS, cfg.Consumer)
+	if err != nil {
+		return nil, fmt.Errorf("create the durable consumer: %w", err)
+	}
+
+	handler, err := orderapp.NewConfirmOrderHandler(orderinfra.NewRepository(txManager), time.Now)
+	if err != nil {
+		return nil, fmt.Errorf("wire the confirmation handler: %w", err)
+	}
+
+	consumer, err := consumerapp.New(consumerapp.Deps{
+		Source:      source,
+		Handler:     handler,
+		Dedup:       consumerinfra.NewDeduplicator(txManager),
+		DeadLetters: consumerinfra.NewDeadLetterStore(txManager),
+		Tx:          txManager,
+		IDs:         idgen.UUID{},
+		Clock:       time.Now,
+		Logger:      logger,
+		Metrics:     consumerinfra.NewMetrics(registry),
+	}, consumerapp.Config{
+		Name:         cfg.Consumer.Name,
+		MaxAttempts:  cfg.Consumer.MaxAttempts,
+		FetchBatch:   cfg.Consumer.FetchBatch,
+		Backoff:      outboxapp.BackoffPolicy{Base: cfg.Consumer.RetryBase, Cap: cfg.Consumer.RetryCap},
+		DrainTimeout: cfg.Consumer.DrainTimeout,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("wire the consumer: %w", err)
+	}
+	return consumer, nil
 }
 
 // sweeper is the part of the idempotency store the worker needs.

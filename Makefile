@@ -155,7 +155,10 @@ e2e: ## compose smoke: primary flow, idempotency, broker kill and recovery
 
 .PHONY: load
 load: ## k6 load test against a running stack
-	$(DOCKER) run --rm -i --network host -v "$(PWD)/test/load":/scripts $(K6_IMAGE) run /scripts/reservation.js
+	# The container joins the compose network rather than using host networking,
+	# which does not reach published ports on every platform.
+	$(DOCKER) run --rm -i --network fulcrum_default -e API=http://api:8080 \
+	  -v "$(PWD)/test/load":/scripts $(K6_IMAGE) run /scripts/reservation.js
 
 .PHONY: demo
 demo: ## the full narrated demonstration
