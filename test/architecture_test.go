@@ -3,10 +3,16 @@
 package test
 
 import (
+	"context"
 	"os/exec"
 	"strings"
 	"testing"
+	"time"
 )
+
+// goListTimeout bounds each go list invocation. The check should never take
+// seconds, and a hung tool must fail the test rather than the whole run.
+const goListTimeout = 2 * time.Minute
 
 const modulePath = "github.com/xrodriguezb/fulcrum"
 
@@ -86,7 +92,10 @@ func packagesMatching(t *testing.T, fragment string) []string {
 	// The pattern is absolute rather than ./... because the test process runs
 	// with this directory as its working directory, and ./... would then list
 	// only this package.
-	out, err := exec.Command("go", "list", modulePath+"/...").Output()
+	ctx, cancel := context.WithTimeout(t.Context(), goListTimeout)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, "go", "list", modulePath+"/...").Output()
 	if err != nil {
 		t.Fatalf("go list failed: %v", err)
 	}
@@ -117,7 +126,10 @@ func directImportsOf(t *testing.T, pkg string) []string {
 func runGoList(t *testing.T, args ...string) []string {
 	t.Helper()
 
-	out, err := exec.Command("go", append([]string{"list"}, args...)...).Output()
+	ctx, cancel := context.WithTimeout(t.Context(), goListTimeout)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, "go", append([]string{"list"}, args...)...).Output()
 	if err != nil {
 		t.Fatalf("go list %v failed: %v", args, err)
 	}
