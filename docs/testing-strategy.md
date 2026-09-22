@@ -72,6 +72,12 @@ to reproduce. A double that is easier than the real thing tests the double.
   which is also what a screen reader uses.
 - **No test of the framework.** There is no test asserting that TanStack Query
   caches, or that ServeMux routes.
+- **No automated check of the responsive layout.** jsdom has no layout engine, so
+  a test asserting behaviour at 375px would assert that a media query string
+  exists, which is not the same claim. The layout is a single column by default
+  with a two column breakpoint at 900px and tables that scroll horizontally in
+  their own container, and it is verified by looking at it. Saying so is more
+  honest than a test that would pass with the stylesheet deleted.
 
 ## Numbers from the last full run
 
