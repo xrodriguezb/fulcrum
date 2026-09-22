@@ -80,6 +80,7 @@ fmt-check: ## fail if any file is not formatted
 	fi
 	@./scripts/check-forbidden-content.sh --all
 	@bash scripts/check-forbidden-content.test.sh >/dev/null
+	@bash scripts/staged-go-packages.test.sh >/dev/null
 ifeq ($(HAS_WEB),yes)
 	npm run --prefix $(WEB_DIR) format:check
 endif
@@ -188,5 +189,6 @@ verify: fmt-check lint arch test test-race contract security build ## everything
 ci: verify test-int e2e ## everything CI runs, in CI order
 
 .PHONY: hooks-test
-hooks-test: ## self-test of the forbidden content scanner
+hooks-test: ## self-test of the shell scripts the hooks depend on
 	bash scripts/check-forbidden-content.test.sh
+	bash scripts/staged-go-packages.test.sh

@@ -9,9 +9,15 @@
 # bypassing the hook. Compilable code is still covered, because the package is
 # analyzed again on the commit that adds the implementation, and `go build ./...`
 # in the pre-push hook covers the whole tree.
+#
+# Deduplication uses a newline delimited string rather than an associative array.
+# An associative array needs bash 4, and the bash on the PATH of a macOS
+# development machine is 3.2, where `declare -A` fails. The callers of this script
+# read its standard output, so that failure printed nothing, and a hook that
+# analyses nothing reports success.
 set -euo pipefail
 
-declare -A seen=()
+seen=$'\n'
 for file in "$@"; do
   case "${file}" in
     *.go) ;;
@@ -19,8 +25,10 @@ for file in "$@"; do
   esac
   dir="$(dirname "${file}")"
   [ -d "${dir}" ] || continue
-  [ -n "${seen[${dir}]:-}" ] && continue
-  seen["${dir}"]=1
+  case "${seen}" in
+    *$'\n'"${dir}"$'\n'*) continue ;;
+  esac
+  seen="${seen}${dir}"$'\n'
   if compgen -G "${dir}/*.go" > /dev/null; then
     for candidate in "${dir}"/*.go; do
       case "${candidate}" in
