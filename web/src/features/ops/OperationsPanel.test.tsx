@@ -121,4 +121,38 @@ describe('OperationsPanel', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('The request failed');
   });
+
+  it('keeps a history of the outbox depth and draws it', async () => {
+    renderWithClient(<OperationsPanel />);
+    expect(await screen.findByText('Outbox pending')).toBeInTheDocument();
+
+    const source = FakeEventSource.instances[0];
+    expect(source).toBeDefined();
+    if (source === undefined) return;
+
+    source.emit('open');
+    for (const pending of [3, 11, 5]) {
+      source.emit(
+        'snapshot',
+        JSON.stringify({
+          ...emptySnapshot,
+          outbox: { pending, failing: 0, published: 0, oldest_unpublished_seconds: 0 },
+        }),
+      );
+    }
+
+    // The peak has to survive in the history after the depth falls again: an
+    // operator asking whether the pipeline recovered needs the spike, and a
+    // component that only remembers the latest snapshot cannot show it.
+    await waitFor(() => {
+      expect(screen.getByRole('img')).toHaveAccessibleName(/now 5, peak 11/);
+    });
+  });
+
+  it('does not draw a trend from a single snapshot', async () => {
+    renderWithClient(<OperationsPanel />);
+
+    expect(await screen.findByText('Outbox pending')).toBeInTheDocument();
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+  });
 });
