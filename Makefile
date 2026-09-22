@@ -20,6 +20,11 @@ GOIMPORTS_VERSION := latest
 # Pinned image digests are resolved by the pipeline; locally the tag is enough and
 # keeps the clean-clone requirement to "Docker installed" and nothing else.
 K6_IMAGE        ?= grafana/k6:0.55.0
+# The offered rate and the window of the sustained throughput run. Both are
+# overridable, because the number a laptop reports and the number a server
+# reports are different claims.
+RATE            ?= 100
+DURATION        ?= 30s
 TRIVY_IMAGE     ?= aquasec/trivy:0.58.1
 SYFT_IMAGE      ?= anchore/syft:v1.18.1
 REDOCLY_IMAGE   ?= redocly/cli:1.34.5
@@ -159,6 +164,14 @@ load: ## k6 load test against a running stack
 	# which does not reach published ports on every platform.
 	$(DOCKER) run --rm -i --network fulcrum_default -e API=http://api:8080 \
 	  -v "$(PWD)/test/load":/scripts $(K6_IMAGE) run /scripts/reservation.js
+
+.PHONY: throughput
+throughput: ## k6 sustained throughput against a running stack
+	# Inventory has to outlast the run, or this would measure refusals.
+	./scripts/seed.sh THROUGHPUT-001 100000 1050
+	$(DOCKER) run --rm -i --network fulcrum_default -e API=http://api:8080 \
+	  -e RATE=$(RATE) -e DURATION=$(DURATION) \
+	  -v "$(PWD)/test/load":/scripts $(K6_IMAGE) run /scripts/throughput.js
 
 .PHONY: demo
 demo: ## the full narrated demonstration

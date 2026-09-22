@@ -134,7 +134,8 @@ make verify    fmt, lint, arch, test, race, contract, security, build
 make test-int  integration tests against real PostgreSQL and NATS
 make up/down   compose lifecycle
 make e2e       compose smoke test, including broker kill and recovery
-make load      k6 against a running stack
+make load      k6 contention test against a running stack
+make throughput k6 sustained throughput, overridable with RATE and DURATION
 make demo      the narrated demonstration
 make ci        everything the pipeline runs, in its order
 ```
