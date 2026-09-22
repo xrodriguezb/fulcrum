@@ -37,6 +37,12 @@ var containerDSN string
 // "connection refused" in an unrelated test. Ownership belongs to the package,
 // so it lives here.
 func TestMain(m *testing.M) {
+	os.Exit(runSuite(m))
+}
+
+// runSuite exists so that every deferred cleanup runs before os.Exit, which
+// would otherwise skip them.
+func runSuite(m *testing.M) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
@@ -57,22 +63,21 @@ func TestMain(m *testing.M) {
 	)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "integration: cannot start postgres: %v\n", err)
-		os.Exit(1)
+		return 1
 	}
+	defer func() {
+		if termErr := testcontainers.TerminateContainer(container); termErr != nil {
+			fmt.Fprintf(os.Stderr, "integration: cannot terminate postgres: %v\n", termErr)
+		}
+	}()
 
 	containerDSN, err = container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "integration: cannot resolve connection string: %v\n", err)
-		_ = testcontainers.TerminateContainer(container)
-		os.Exit(1)
+		return 1
 	}
 
-	code := m.Run()
-
-	if termErr := testcontainers.TerminateContainer(container); termErr != nil {
-		fmt.Fprintf(os.Stderr, "integration: cannot terminate postgres: %v\n", termErr)
-	}
-	os.Exit(code)
+	return m.Run()
 }
 
 // newPool returns a pool against the shared container, with the schema applied.
@@ -110,19 +115,5 @@ func truncateAll(t *testing.T, pool *pgxpool.Pool) {
 TRUNCATE TABLE outbox_events, idempotency_keys, order_lines, orders, inventory_items RESTART IDENTITY CASCADE`
 	if _, err := pool.Exec(t.Context(), truncate); err != nil {
 		t.Fatalf("truncate: %v", err)
-	}
-}
-
-// seedInventory inserts one stock position and returns nothing: the tests read
-// it back through the repository under test rather than trusting the fixture.
-func seedInventory(t *testing.T, pool *pgxpool.Pool, sku string, available int, unitPriceCents int64) {
-	t.Helper()
-
-	const insert = `
-INSERT INTO inventory_items (sku, available, reserved, unit_price_cents, currency, version)
-VALUES ($1, $2, 0, $3, 'EUR', 1)
-ON CONFLICT (sku) DO UPDATE SET available = EXCLUDED.available, reserved = 0, version = 1`
-	if _, err := pool.Exec(t.Context(), insert, sku, available, unitPriceCents); err != nil {
-		t.Fatalf("seed inventory: %v", err)
 	}
 }
