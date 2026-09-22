@@ -58,6 +58,10 @@ h2 {
   gap: 1rem;
   padding: 1rem 1.25rem;
   grid-template-columns: 1fr;
+  /* Panels size to their content. Stretching them to the tallest sibling leaves
+     a column of dead space next to a short panel, which reads as a rendering
+     bug rather than as a layout choice. */
+  align-items: start;
 }
 
 /* Two columns once there is room for them. Below that everything stacks, which
@@ -65,6 +69,15 @@ h2 {
 @media (min-width: 900px) {
   .app-main {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* The pipeline summary and the dead letter queue span both columns: one is a
+     strip of numbers that reads left to right, the other is a wide table. Left
+     in a single column they would leave a tall gap beside a short panel, which
+     looks like a rendering fault rather than a layout. */
+  .app-main > *:first-child,
+  .app-main > *:last-child {
+    grid-column: 1 / -1;
   }
 }
 
@@ -95,8 +108,11 @@ h2 {
 table {
   width: 100%;
   border-collapse: collapse;
+  /* The table scrolls inside its own panel rather than widening the page, which
+     is what keeps the layout usable at 375px. */
   display: block;
   overflow-x: auto;
+  margin-top: 0.75rem;
 }
 
 th,
@@ -218,6 +234,10 @@ button:disabled {
 
 .form-feedback:empty {
   display: none;
+}
+
+.form-feedback:not(:empty) {
+  margin-top: 0.5rem;
 }
 
 .visually-hidden {
