@@ -4,7 +4,6 @@ package app
 
 import (
 	"context"
-	"time"
 
 	"github.com/xrodriguezb/fulcrum/internal/outbox/domain"
 )
@@ -16,18 +15,4 @@ import (
 // together, so neither can exist without the other.
 type Writer interface {
 	Append(ctx context.Context, envelopes ...domain.Envelope) error
-}
-
-// Stats is what the operations console shows about the outbox.
-type Stats struct {
-	Pending                int
-	Failing                int
-	Published              int
-	OldestUnpublishedAge   time.Duration
-	OldestUnpublishedEvent string
-}
-
-// StatsReader reports outbox health.
-type StatsReader interface {
-	Stats(ctx context.Context) (Stats, error)
 }

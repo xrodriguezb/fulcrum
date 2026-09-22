@@ -31,8 +31,6 @@ var (
 	// ErrInsufficientInventory means the request exceeds what is available. It
 	// is the domain translation of a reservation that matched zero rows.
 	ErrInsufficientInventory = errors.New("insufficient inventory")
-	// ErrNothingReserved means a release asked for more than is held.
-	ErrNothingReserved = errors.New("not enough reserved units to release")
 )
 
 // SKU is a validated stock keeping unit.
@@ -118,18 +116,6 @@ func (i *Item) Reserve(quantity Quantity) error {
 	}
 	i.available -= quantity.Int()
 	i.reserved += quantity.Int()
-	i.version++
-	return nil
-}
-
-// Release moves units back from reserved to available.
-func (i *Item) Release(quantity Quantity) error {
-	if quantity.Int() > i.reserved {
-		return fmt.Errorf("%w: %s holds %d reserved and %d were released",
-			ErrNothingReserved, i.sku.String(), i.reserved, quantity.Int())
-	}
-	i.reserved -= quantity.Int()
-	i.available += quantity.Int()
 	i.version++
 	return nil
 }

@@ -22,6 +22,7 @@ import (
 	consumerapp "github.com/xrodriguezb/fulcrum/internal/consumer/app"
 	consumerinfra "github.com/xrodriguezb/fulcrum/internal/consumer/infra"
 	idempotencyinfra "github.com/xrodriguezb/fulcrum/internal/idempotency/infra"
+	opsinfra "github.com/xrodriguezb/fulcrum/internal/ops/infra"
 	orderapp "github.com/xrodriguezb/fulcrum/internal/order/app"
 	orderinfra "github.com/xrodriguezb/fulcrum/internal/order/infra"
 	outboxapp "github.com/xrodriguezb/fulcrum/internal/outbox/app"
@@ -90,7 +91,7 @@ func run() error {
 	registry := prometheus.NewRegistry()
 	registry.MustRegister(collectors.NewGoCollector(), collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	metrics := outboxinfra.NewMetrics(registry)
-	outboxinfra.NewDepthCollector(registry, outboxinfra.NewWriter(txManager), 2*time.Second)
+	outboxinfra.NewDepthCollector(registry, opsinfra.NewReader(txManager), 2*time.Second)
 
 	publisher, err := outboxapp.NewPublisher(claimer, publisherTarget, outboxapp.PublisherConfig{
 		Workers:        cfg.Outbox.Workers,

@@ -6,7 +6,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/xrodriguezb/fulcrum/internal/outbox/app"
+	opsapp "github.com/xrodriguezb/fulcrum/internal/ops/app"
 )
 
 // Metrics records publisher activity and exposes outbox depth.
@@ -53,14 +53,21 @@ func (m *Metrics) PublishFailed(exhausted bool) {
 // ObserveBatch records how many rows a claim returned.
 func (m *Metrics) ObserveBatch(size int) { m.batchSize.Observe(float64(size)) }
 
+// SnapshotReader is the operational read model, as this collector needs it. The
+// operations console reads the same snapshot, so there is one query behind both
+// rather than two that can disagree.
+type SnapshotReader interface {
+	Snapshot(ctx context.Context) (opsapp.Snapshot, error)
+}
+
 // depthCollector reports outbox depth at scrape time rather than on a ticker.
 //
 // A ticker would keep querying a database nobody is asking about, and it would
 // report a number that is up to one interval stale. Collecting on scrape costs
 // one query per scrape and is always current.
 type depthCollector struct {
-	stats   app.StatsReader
-	timeout time.Duration
+	snapshots SnapshotReader
+	timeout   time.Duration
 
 	pending   *prometheus.Desc
 	failing   *prometheus.Desc
@@ -68,10 +75,10 @@ type depthCollector struct {
 }
 
 // NewDepthCollector registers a collector that reports outbox depth on scrape.
-func NewDepthCollector(registry prometheus.Registerer, stats app.StatsReader, timeout time.Duration) {
+func NewDepthCollector(registry prometheus.Registerer, snapshots SnapshotReader, timeout time.Duration) {
 	collector := &depthCollector{
-		stats:   stats,
-		timeout: timeout,
+		snapshots: snapshots,
+		timeout:   timeout,
 		pending: prometheus.NewDesc("outbox_pending_total",
 			"Events written and not yet published.", nil, nil),
 		failing: prometheus.NewDesc("outbox_failing_total",
@@ -94,7 +101,7 @@ func (c *depthCollector) Collect(ch chan<- prometheus.Metric) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
 	defer cancel()
 
-	stats, err := c.stats.Stats(ctx)
+	snapshot, err := c.snapshots.Snapshot(ctx)
 	if err != nil {
 		// A scrape that cannot read the database reports nothing rather than
 		// zero: a zero here would look like an empty outbox, which is the
@@ -102,7 +109,8 @@ func (c *depthCollector) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	ch <- prometheus.MustNewConstMetric(c.pending, prometheus.GaugeValue, float64(stats.Pending))
-	ch <- prometheus.MustNewConstMetric(c.failing, prometheus.GaugeValue, float64(stats.Failing))
-	ch <- prometheus.MustNewConstMetric(c.oldestAge, prometheus.GaugeValue, stats.OldestUnpublishedAge.Seconds())
+	ch <- prometheus.MustNewConstMetric(c.pending, prometheus.GaugeValue, float64(snapshot.Outbox.Pending))
+	ch <- prometheus.MustNewConstMetric(c.failing, prometheus.GaugeValue, float64(snapshot.Outbox.Failing))
+	ch <- prometheus.MustNewConstMetric(c.oldestAge, prometheus.GaugeValue,
+		snapshot.Outbox.OldestUnpublishedAge.Seconds())
 }

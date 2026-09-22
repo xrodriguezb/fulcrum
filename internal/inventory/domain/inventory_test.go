@@ -88,31 +88,6 @@ func TestReserveRefusesToOversell(t *testing.T) {
 	}
 }
 
-func TestReleaseReturnsUnitsToAvailable(t *testing.T) {
-	t.Parallel()
-
-	item := mustItem(t, "WIDGET-001", 2, 3)
-	quantity, err := domain.NewQuantity(3)
-	if err != nil {
-		t.Fatalf("NewQuantity returned %v", err)
-	}
-
-	if err := item.Release(quantity); err != nil {
-		t.Fatalf("Release returned %v", err)
-	}
-	if item.Available() != 5 || item.Reserved() != 0 {
-		t.Errorf("after release: available %d reserved %d, want 5 and 0", item.Available(), item.Reserved())
-	}
-
-	tooMuch, err := domain.NewQuantity(1)
-	if err != nil {
-		t.Fatalf("NewQuantity returned %v", err)
-	}
-	if err := item.Release(tooMuch); !errors.Is(err, domain.ErrNothingReserved) {
-		t.Errorf("releasing more than is reserved must fail, got %v", err)
-	}
-}
-
 func TestNewItemRejectsImpossibleStock(t *testing.T) {
 	t.Parallel()
 

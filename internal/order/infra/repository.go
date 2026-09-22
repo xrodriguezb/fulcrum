@@ -215,38 +215,11 @@ func toLine(rawSKU string, quantity int, unitCents int64) (domain.Line, error) {
 }
 
 func (r *Repository) linesFor(ctx context.Context, orderID string) ([]domain.Line, error) {
-	const query = `
-SELECT sku, quantity, unit_price_cents
-FROM   order_lines
-WHERE  order_id = $1
-ORDER  BY sku`
-
-	rows, err := r.tx.Executor(ctx).Query(ctx, query, orderID)
+	byOrder, err := r.linesForAll(ctx, []string{orderID})
 	if err != nil {
-		return nil, errs.Internal("read order lines", err)
+		return nil, err
 	}
-	defer rows.Close()
-
-	var lines []domain.Line
-	for rows.Next() {
-		var (
-			rawSKU    string
-			quantity  int
-			unitCents int64
-		)
-		if scanErr := rows.Scan(&rawSKU, &quantity, &unitCents); scanErr != nil {
-			return nil, errs.Internal("scan order line", scanErr)
-		}
-		line, lineErr := toLine(rawSKU, quantity, unitCents)
-		if lineErr != nil {
-			return nil, lineErr
-		}
-		lines = append(lines, line)
-	}
-	if rows.Err() != nil {
-		return nil, errs.Internal("iterate order lines", rows.Err())
-	}
-	return lines, nil
+	return byOrder[orderID], nil
 }
 
 // orderRow is the raw shape of a row, kept separate from the aggregate so that
