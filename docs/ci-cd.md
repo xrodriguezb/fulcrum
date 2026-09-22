@@ -83,16 +83,21 @@ nothing else does.
 
 ## Branch protection
 
-`main` requires the pull request pipeline to pass. The required checks are
-`quality`, `contract`, `go unit tests`, `go integration tests (15-alpine)`,
-`go integration tests (16-alpine)`, `web tests`, `security` and
-`pipeline summary`. Linear history is required and direct pushes are not
-permitted.
+`main` is protected. Force pushes and deletions are refused, linear history is
+required, and three checks must pass before a merge: `quality`, `contract` and
+`pipeline summary`.
 
-Those checks and not others because each one can fail for a reason that a
-reviewer cannot see by reading the diff. `build images` and `compose end to end`
-run on every pull request and are gated through `pipeline summary`, which fails
-when any of its dependencies did not pass.
+Those three and not the whole list, for a specific reason. The paths filter means
+a documentation-only pull request skips the integration matrix, the web tests and
+the image build, and GitHub treats a skipped required check as not satisfied. A
+list naming every job would therefore block exactly the pull requests the filter
+exists to make cheap.
+
+`quality` and `contract` run on every change, so they can be required directly.
+`pipeline summary` depends on every other job and fails when any of them failed,
+which makes it the aggregate gate: a pull request that runs the integration
+matrix cannot merge with it red, and a pull request that skips it is not
+penalised for skipping.
 
 ## What is deliberately not automated
 
