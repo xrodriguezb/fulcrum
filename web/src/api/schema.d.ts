@@ -276,7 +276,13 @@ export interface components {
          */
         OrderStatus: "pending" | "confirmed" | "cancelled";
         HealthStatus: {
-            /** @enum {string} */
+            /**
+             * @description ok means every dependency answered. degraded means a dependency this
+             *     instance can work without did not, which is still a ready instance:
+             *     the api accepts orders while the broker is down, because the outbox
+             *     decouples acceptance from publication. See ADR 0011.
+             * @enum {string}
+             */
             status: "ok" | "degraded";
             checks?: {
                 [key: string]: string;
