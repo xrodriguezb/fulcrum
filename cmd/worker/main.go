@@ -230,9 +230,12 @@ func serveOperationalEndpoints(
 	mux := http.NewServeMux()
 	mux.Handle("GET /metrics", promhttp.HandlerFor(registry, promhttp.HandlerOpts{ErrorHandling: promhttp.ContinueOnError}))
 	mux.HandleFunc("GET /healthz", httpx.Liveness(logger))
+	// Both are critical here, and that asymmetry with the api is the point:
+	// publishing and consuming are this binary's job, so it cannot do that job
+	// without the broker, while the api can still accept orders without it.
 	mux.HandleFunc("GET /readyz", httpx.Readiness([]httpx.Check{
-		{Name: "postgres", Probe: pool.Ping},
-		{Name: "nats", Probe: broker.Health},
+		{Name: "postgres", Critical: true, Probe: pool.Ping},
+		{Name: "nats", Critical: true, Probe: broker.Health},
 	}, 2*time.Second, logger))
 
 	return httpx.Serve(ctx, httpx.ServerConfig{

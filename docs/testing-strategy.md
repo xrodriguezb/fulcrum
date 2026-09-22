@@ -47,6 +47,16 @@ a role name and a filesystem path and asserts none of them appear in the
 response. The dead letter test does the same for the stored failure reason. Those
 two assertions are what catch a leak, rather than describing one.
 
+**The fuzz targets** cover the two parsers that read input the system did not
+write: the request fingerprint, which a client controls, and the event envelope
+decoder, which anything with publish rights controls. Both assert a property
+rather than an example. The fingerprint must survive a re-encoding, because a
+client library or a proxy re-encoding a retry must not be told it reused its key.
+The envelope decoder must reject or accept and never panic, and anything it
+accepts must survive a round trip, because the consumer treats it as a fact the
+publisher stated. The seed corpus runs in the normal suite; ten minute campaigns
+run nightly.
+
 **The architecture test** walks the import graph. It was verified by temporarily
 importing pgx into the order domain and watching it fail.
 

@@ -69,7 +69,7 @@ func newAPI(t *testing.T, checks ...httpx.Check) apiHarness {
 	}
 
 	if len(checks) == 0 {
-		checks = []httpx.Check{{Name: "postgres", Probe: func(ctx context.Context) error {
+		checks = []httpx.Check{{Name: "postgres", Critical: true, Probe: func(ctx context.Context) error {
 			return postgres.HealthCheck(ctx, pool, time.Second)
 		}}}
 	}
@@ -271,7 +271,7 @@ func TestAPIRejectsBadRequests(t *testing.T) {
 // The probe has to report the truth when the database is gone, which is the only
 // way a load balancer can stop sending traffic to this instance.
 func TestReadinessFailsWhenTheDatabaseIsUnreachable(t *testing.T) {
-	h := newAPI(t, httpx.Check{Name: "postgres", Probe: func(context.Context) error {
+	h := newAPI(t, httpx.Check{Name: "postgres", Critical: true, Probe: func(context.Context) error {
 		return errs.Unavailable("the database is not reachable", nil)
 	}})
 

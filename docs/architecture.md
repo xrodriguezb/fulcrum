@@ -5,30 +5,28 @@
 A modular monolith with explicit bounded contexts, compiled into two binaries
 that share one codebase and one database.
 
-```
-                    HTTP                          
- client  ────────────────────────▶  cmd/api
-                                      │
-                                      │  one transaction
-                                      ▼
-              ┌───────────────────────────────────────────┐
-              │ reserve inventory (conditional UPDATE)     │
-              │ persist order and lines                    │
-              │ append order.created to outbox_events      │
-              │ complete the idempotency key               │
-              └───────────────────────────────────────────┘
-                                      │
-                                      ▼
-                                 PostgreSQL
-                                      ▲
-                                      │ claim with SKIP LOCKED and a lease
-                                      │
- cmd/worker ──────────── publish ────▶ NATS JetStream
-      │                                      │
-      │◀────────────── consume ──────────────┘
-      │
-      └── dedup row and side effect in one transaction
-          (order becomes confirmed, or the event is dead lettered)
+```mermaid
+flowchart LR
+    client([client]) -->|POST /api/v1/orders| api[cmd/api]
+
+    subgraph tx["one transaction"]
+        direction TB
+        reserve["reserve inventory<br/>conditional UPDATE"]
+        persist["persist order and lines"]
+        outbox["append order.created<br/>to outbox_events"]
+        complete["complete the<br/>idempotency key"]
+        reserve --> persist --> outbox --> complete
+    end
+
+    api --> tx
+    tx --> db[(PostgreSQL)]
+
+    worker[cmd/worker] -->|claim with SKIP LOCKED and a lease| db
+    worker -->|publish, waits for the ack| nats{{NATS JetStream}}
+    nats -->|durable pull consumer| worker
+    worker -->|dedup row and side effect<br/>in one transaction| db
+
+    console([operations console]) -->|SSE and polling| api
 ```
 
 The console is a static bundle served by nginx, which proxies `/api` to the API

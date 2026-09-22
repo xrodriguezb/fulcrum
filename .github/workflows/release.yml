@@ -25,6 +25,11 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Provenance attestation is signed with a short lived OIDC token, so the
+      # job asks for one. It says which workflow, at which commit, produced this
+      # digest, which is the question nobody can answer after the fact.
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -66,6 +71,13 @@ jobs:
 
       # An image without a bill of materials is an image nobody can answer
       # questions about when the next advisory lands.
+      - name: Attest the build provenance
+        uses: actions/attest-build-provenance@977bb373ede98d70efdf65b84cb5f73e068dcc2a # v3
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.name }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
       - name: Generate the software bill of materials
         uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0
         with:

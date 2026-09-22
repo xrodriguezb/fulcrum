@@ -134,8 +134,10 @@ func TestReadinessReportsAFailingDependency(t *testing.T) {
 	t.Parallel()
 
 	failing := []httpx.Check{
-		{Name: "postgres", Probe: func(context.Context) error { return errors.New("dial tcp 10.0.0.4:5432: connect: connection refused") }},
-		{Name: "nats", Probe: func(context.Context) error { return nil }},
+		{Name: "postgres", Critical: true, Probe: func(context.Context) error {
+			return errors.New("dial tcp 10.0.0.4:5432: connect: connection refused")
+		}},
+		{Name: "nats", Critical: false, Probe: func(context.Context) error { return nil }},
 	}
 
 	handler := httpx.Readiness(failing, time.Second, logging.NewJSON(discard{}, 0))
@@ -163,7 +165,7 @@ func TestReadinessPassesWhenEveryDependencyAnswers(t *testing.T) {
 	t.Parallel()
 
 	handler := httpx.Readiness([]httpx.Check{
-		{Name: "postgres", Probe: func(context.Context) error { return nil }},
+		{Name: "postgres", Critical: true, Probe: func(context.Context) error { return nil }},
 	}, time.Second, logging.NewJSON(discard{}, 0))
 
 	recorder := newRecorder()
@@ -174,6 +176,37 @@ func TestReadinessPassesWhenEveryDependencyAnswers(t *testing.T) {
 	}
 	if !contains(recorder.Body.String(), `"postgres":"ok"`) {
 		t.Errorf("the response does not report the check: %s", recorder.Body.String())
+	}
+}
+
+// The api accepts orders while the broker is down, because the outbox decouples
+// acceptance from publication. Reporting unready would make a load balancer
+// remove the instance and cause the outage the design exists to prevent.
+func TestReadinessStaysReadyWhenANonCriticalDependencyFails(t *testing.T) {
+	t.Parallel()
+
+	handler := httpx.Readiness([]httpx.Check{
+		{Name: "postgres", Critical: true, Probe: func(context.Context) error { return nil }},
+		{Name: "nats", Critical: false, Probe: func(context.Context) error {
+			return errors.New("no servers available")
+		}},
+	}, time.Second, logging.NewJSON(discard{}, 0))
+
+	recorder := newRecorder()
+	handler(recorder, mustRequest(t, http.MethodGet, "/readyz"))
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200: a broker outage must not remove the instance from rotation", recorder.Code)
+	}
+	body := recorder.Body.String()
+	if !contains(body, `"status":"degraded"`) {
+		t.Errorf("the response does not report degradation: %s", body)
+	}
+	if !contains(body, `"nats":"degraded"`) {
+		t.Errorf("the response does not name the affected dependency: %s", body)
+	}
+	if !contains(body, `"postgres":"ok"`) {
+		t.Errorf("the response does not report the healthy dependency: %s", body)
 	}
 }
 

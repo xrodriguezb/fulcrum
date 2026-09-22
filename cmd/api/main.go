@@ -117,10 +117,15 @@ func run() error {
 		Orders: orderinfra.NewHandlers(creator, orders, logger),
 		Ops:    opsinfra.NewHandlers(opsinfra.NewReader(txManager), reserver, logger),
 		Checks: []httpx.Check{
-			{Name: "postgres", Probe: func(probeCtx context.Context) error {
+			// The request path cannot work without the database: every order is
+			// a transaction.
+			{Name: "postgres", Critical: true, Probe: func(probeCtx context.Context) error {
 				return postgres.HealthCheck(probeCtx, pool, time.Second)
 			}},
-			{Name: "nats", Probe: broker.Health},
+			// The broker is not on the request path. Orders are accepted and
+			// stored with their events while it is down, which is the whole
+			// point of the outbox, so its absence is degraded and not unready.
+			{Name: "nats", Critical: false, Probe: broker.Health},
 		},
 		Registry: registry,
 		Logger:   logger,

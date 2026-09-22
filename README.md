@@ -7,29 +7,28 @@ claim: **inventory cannot be oversold under any level of concurrency**, and to
 show what has to be true around that claim for it to survive a broker outage, a
 duplicate request, and a crash between two writes.
 
-```
-                    HTTP                          
- client  ────────────────────────▶  cmd/api
-                                      │
-                                      │  one transaction
-                                      ▼
-              ┌───────────────────────────────────────────┐
-              │ reserve inventory (conditional UPDATE)     │
-              │ persist order and lines                    │
-              │ append order.created to outbox_events      │
-              │ complete the idempotency key               │
-              └───────────────────────────────────────────┘
-                                      │
-                                      ▼
-                                 PostgreSQL
-                                      ▲
-                                      │ claim with SKIP LOCKED and a lease
-                                      │
- cmd/worker ──────────── publish ────▶ NATS JetStream
-      │                                      │
-      │◀────────────── consume ──────────────┘
-      │
-      └── dedup row and side effect in one transaction
+```mermaid
+flowchart LR
+    client([client]) -->|POST /api/v1/orders| api[cmd/api]
+
+    subgraph tx["one transaction"]
+        direction TB
+        reserve["reserve inventory<br/>conditional UPDATE"]
+        persist["persist order and lines"]
+        outbox["append order.created<br/>to outbox_events"]
+        complete["complete the<br/>idempotency key"]
+        reserve --> persist --> outbox --> complete
+    end
+
+    api --> tx
+    tx --> db[(PostgreSQL)]
+
+    worker[cmd/worker] -->|claim with SKIP LOCKED and a lease| db
+    worker -->|publish, waits for the ack| nats{{NATS JetStream}}
+    nats -->|durable pull consumer| worker
+    worker -->|dedup row and side effect<br/>in one transaction| db
+
+    console([operations console]) -->|SSE and polling| api
 ```
 
 ## Run it
@@ -90,6 +89,15 @@ broker being killed and the backlog draining afterwards.
   produces a diff.
 - **A shift-left pipeline.** Hooks catch what hooks can catch, and the pipeline
   runs what a laptop cannot afford to.
+
+## The operations console
+
+![The Fulcrum operations console](docs/images/console.png)
+
+Live outbox depth and dead letter count over server sent events with a polling
+fallback, optimistic order creation that rolls back on a 409, per panel error
+boundaries, and zero accessibility violations under axe. The same page at 375px
+is in `docs/images/console-375px.png`.
 
 ## Reading it in thirty minutes
 

@@ -22,13 +22,13 @@ What happens when each part fails, and what the system promises in return.
 | Two identical requests race | One creates the order, the other replays it or receives 409 with `Retry-After` | Nothing |
 | The business transaction fails | Everything rolls back, the key is released, the client can retry | An error log with the cause and the trace id |
 | The API crashes between the claim and the transaction | The key stays in progress until its TTL | `stuck_idempotency_keys` in the console |
-| The broker is down | Orders keep being accepted, the outbox grows, publication retries with jittered backoff | `outbox_pending_total` and `outbox_oldest_unpublished_seconds` rising |
+| The broker is down | Orders keep being accepted, the outbox grows, publication retries with jittered backoff. The api stays ready and reports degraded; the worker reports unready, because publishing is its job | `outbox_pending_total` and `outbox_oldest_unpublished_seconds` rising, `readyz` degraded |
 | The broker returns | The backlog drains, no event is published twice from one row | Both numbers falling to zero |
 | A publisher dies mid publish | The lease expires and another instance takes the row | A brief rise in `outbox_oldest_unpublished_seconds` |
 | An event is delivered twice | The deduplication row makes the second delivery a no-op | `consumer_processed_total` counts both |
 | An event payload is malformed | Dead lettered on the first delivery, never retried | `dead_letter_total` and the console entry |
 | The projection is briefly unavailable | Retried with full jitter up to the attempt budget, then dead lettered | `consumer_failed_total{reason_class}` |
-| The database is unreachable | The API reports not ready, the worker keeps running and retries | `readyz` failing, error logs |
+| The database is unreachable | The api reports not ready and is removed from rotation, the worker keeps running and retries | `readyz` 503, error logs |
 | A deployment interrupts processing | The event returns to the broker and is redelivered | Nothing |
 
 ## The three mechanisms
