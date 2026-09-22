@@ -260,6 +260,21 @@ jobs:
             echo "web workspace does not exist yet"
           fi
 
+      # The Dockerfiles decide what runs as root, what lands in the image and
+      # what a build pulls in, so they are reviewed by a linter like any other
+      # source file.
+      - name: Lint the service image
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
+        with:
+          dockerfile: deploy/service.Dockerfile
+          failure-threshold: warning
+
+      - name: Lint the console image
+        uses: hadolint/hadolint-action@54c9adbab1582c2ef04b2016b760714a4bfde3cf # v3.1.0
+        with:
+          dockerfile: deploy/web.Dockerfile
+          failure-threshold: warning
+
   build-images:
     name: build images
     needs: [detect-changes, test-go-unit, test-web]

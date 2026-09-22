@@ -74,6 +74,7 @@ type CreateOrderDeps struct {
 	IDs          IDGenerator
 	KeyTTL       time.Duration
 	MaxKeyLength int
+	Metrics      Metrics
 }
 
 // CreateOrderHandler reserves inventory, persists an order and records the
@@ -103,6 +104,9 @@ func NewCreateOrderHandler(deps CreateOrderDeps) (*CreateOrderHandler, error) {
 		return nil, errors.New("create order handler needs an id generator")
 	case deps.MaxKeyLength <= 0:
 		return nil, errors.New("create order handler needs a positive key length limit")
+	}
+	if deps.Metrics == nil {
+		deps.Metrics = NoopMetrics{}
 	}
 	return &CreateOrderHandler{deps: deps}, nil
 }
@@ -148,8 +152,14 @@ func (h *CreateOrderHandler) Handle(ctx context.Context, cmd CreateOrderCommand)
 	if !claim.Claimed {
 		return h.replay(claim.Existing, fingerprint)
 	}
+	h.deps.Metrics.IdempotencyOutcome(OutcomeClaimed)
 
 	result, err := h.execute(ctx, cmd, now)
+	if err == nil {
+		// Counted after the commit, so the number is orders that exist rather
+		// than orders that were attempted.
+		h.deps.Metrics.OrderCreated()
+	}
 	if err != nil {
 		// The key is released on a context that cancellation cannot reach:
 		// a client that disconnected mid-request must not leave its key stuck
@@ -185,12 +195,14 @@ func (h *CreateOrderHandler) replay(existing *idempotency.Record, fingerprint []
 	// A key reused for a different request is a client bug, and answering it
 	// with the first request's response would hide that bug behind a success.
 	if !bytes.Equal(existing.Fingerprint, fingerprint) {
+		h.deps.Metrics.IdempotencyOutcome(OutcomeReused)
 		return CreateOrderResult{}, errs.Precondition(errs.CodeIdempotencyKeyReuse,
 			"This Idempotency-Key was already used with a different request body.", nil)
 	}
 
 	switch existing.Status {
 	case idempotency.StatusCompleted:
+		h.deps.Metrics.IdempotencyOutcome(OutcomeReplayed)
 		var view OrderView
 		if err := json.Unmarshal(existing.ResponseBody, &view); err != nil {
 			return CreateOrderResult{}, errs.Internal("decode stored response", err)
@@ -203,6 +215,7 @@ func (h *CreateOrderHandler) replay(existing *idempotency.Record, fingerprint []
 		}, nil
 
 	case idempotency.StatusInProgress:
+		h.deps.Metrics.IdempotencyOutcome(OutcomeInProgress)
 		return CreateOrderResult{}, errs.Conflict(errs.CodeIdempotencyInProgress,
 			"A request with this Idempotency-Key is still in progress.", nil)
 
@@ -225,6 +238,12 @@ func (h *CreateOrderHandler) execute(ctx context.Context, cmd CreateOrderCommand
 	err := h.deps.Tx.WithinTx(ctx, func(txCtx context.Context) error {
 		reserved, reserveErr := h.deps.Inventory.Reserve(txCtx, toReservationRequests(cmd.Lines))
 		if reserveErr != nil {
+			if errs.CodeOf(reserveErr) == errs.CodeInventoryInsufficient {
+				// Counted separately from other 409s: an operator watching for
+				// contention needs refusals caused by stock, not by a client
+				// sending the same key twice.
+				h.deps.Metrics.InventoryConflict()
+			}
 			return reserveErr
 		}
 
