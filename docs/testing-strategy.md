@@ -8,7 +8,7 @@
 | Go integration | 40 test functions | Real PostgreSQL and NATS through Testcontainers | Does the database do what the design assumes |
 | Web | 15 tests | MSW at the network boundary | Can the operator do the thing |
 | End to end | 1 script, 9 assertions | The compose stack, in CI | Does the assembled system behave |
-| Load | 1 k6 scenario | The running stack | Does the claim hold under contention |
+| Load | 2 k6 scenarios | The running stack | Does the claim hold under contention, and what does the write path sustain |
 
 Go test code is roughly the same size as Go production code. That ratio is not a
 target; it is what proving a concurrency claim costs.
@@ -107,5 +107,8 @@ to reproduce. A double that is easier than the real thing tests the double.
   and 16 in CI.
 - Web: 31 tests, zero axe violations, statements 89 percent, lines 91 percent.
 - Console production bundle: 272.03 kB, 83.54 kB gzipped.
-- k6: 200 attempted, 5 created, 195 conflicted, 0 oversold, p95 22.6 ms locally
-  and 175.1 ms on a shared CI runner.
+- k6 contention: 200 attempted, 5 created, 195 conflicted, 0 oversold, p95
+  22.6 ms locally and 175.1 ms on a shared CI runner.
+- k6 throughput: 1000 orders a second sustained for 20 seconds, 20001 created,
+  none dropped, p50 2.2 ms and p95 29.1 ms, on a laptop with the whole stack in
+  Docker Desktop. The ceiling on that machine is about 1018 a second.

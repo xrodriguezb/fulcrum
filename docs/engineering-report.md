@@ -81,6 +81,29 @@ The CI numbers are on a shared runner with the whole stack on one machine. They
 are included because hiding them would make the local numbers look like a claim
 about hardware this project does not have.
 
+Contention is not throughput. That scenario starves the shelf on purpose, so
+most of its responses are refusals and its rate says nothing about how much
+work the write path does. `test/load/throughput.js` answers the other question
+with a constant arrival rate against stocked inventory, on the same laptop with
+the whole stack in Docker Desktop:
+
+| offered | achieved | created | dropped | p50 | p95 | p99 |
+| --- | --- | --- | --- | --- | --- | --- |
+| 100 /s | 100.0 /s | 3001 | 0 | 1.9 ms | 3.9 ms | 5.8 ms |
+| 1000 /s | 998.5 /s | 20001 | 0 | 2.2 ms | 29.1 ms | 50.4 ms |
+| 2500 /s | 1018.1 /s | 25046 | 24955 | 4612.6 ms | 4831.2 ms | 4844.7 ms |
+
+The third row is the ceiling, and it is reported rather than trimmed. At 2500
+offered orders a second the machine sustains about a thousand, k6 cannot start
+the rest, and the requests that do run queue for four and a half seconds. The
+run fails its thresholds, which is the correct outcome: a load test that only
+reports rates the system can meet is a load test that never finds the limit.
+
+Nothing was oversold at any rate, and no order was refused while stock lasted.
+The arrival rate is open by design. A fixed pool of virtual users would have
+lowered the offered rate as responses slowed, and the system would have looked
+healthy at every level.
+
 Two hot paths are benchmarked, because both are paid per request or per event
 before any I/O happens. On an M1 Max:
 
