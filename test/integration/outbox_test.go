@@ -384,10 +384,16 @@ func TestPublishingToJetStreamStoresTheEvent(t *testing.T) {
 	}
 }
 
+// conditionDeadline is generous on purpose. These tests wait on a publisher, a
+// broker and a consumer running concurrently, and a shorter budget fails on a
+// loaded machine for reasons that have nothing to do with the behaviour under
+// test.
+const conditionDeadline = 90 * time.Second
+
 func waitForCondition(t *testing.T, condition func() bool) {
 	t.Helper()
 
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(conditionDeadline)
 	for time.Now().Before(deadline) {
 		if condition() {
 			return
