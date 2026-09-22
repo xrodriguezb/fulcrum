@@ -52,6 +52,10 @@ linters:
         - .Wrapf(
   exclusions:
     generated: lax
+    paths:
+      # npm packages ship Go sources of their own. They are not this project's
+      # code and linting them says nothing about this project.
+      - (^|/)node_modules(/|$)
     rules:
       # Test helpers legitimately ignore errors on teardown paths and construct
       # fixtures that would be flagged as unwrapped.

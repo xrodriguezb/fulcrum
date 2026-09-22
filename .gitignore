@@ -6,6 +6,8 @@
 /dist/
 web/dist/
 web/node_modules/
+web/coverage/
+web/tsconfig.tsbuildinfo
 node_modules/
 
 # Go
