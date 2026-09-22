@@ -101,6 +101,39 @@ Outbox depth is collected at scrape time rather than on a ticker. A ticker would
 query the database when nobody is asking and still report a number that is one
 interval stale.
 
+## The dashboard
+
+`deploy/grafana/fulcrum-dashboard.json` imports into any Grafana with a
+Prometheus data source. It is a file rather than another compose service: the
+stack already runs five containers to prove one claim, and a monitoring stack
+that exists only to render a screenshot is weight without an argument.
+
+Twelve panels in four rows: the four numbers an operator reads first, then order
+intake against refusals, request quantiles by route, responses by status,
+idempotency outcomes, outbox depth beside publishing throughput, and the
+consumer beside dead letters. Depth is deliberately next to throughput, because
+depth alone cannot tell a burst apart from a stall.
+
+The panel to alert on is the oldest unpublished event rather than the depth. A
+thousand events published in a second is healthy; one event stuck for five
+minutes is not, and only the age says so.
+
+Scrape both services. The worker owns the outbox and consumer series and does
+not route them through the API:
+
+```yaml
+scrape_configs:
+  - job_name: fulcrum-api
+    static_configs: [{ targets: ['api:8080'] }]
+  - job_name: fulcrum-worker
+    static_configs: [{ targets: ['worker:8081'] }]
+```
+
+Series with labels appear at their first observation, so `consumer_failed_total`,
+`dead_letter_total` and `outbox_publish_failures_total` are absent from a healthy
+exposition and their panels are empty until something fails. That is a property
+of label sets, not a broken query.
+
 ## Cardinality
 
 Every label is a closed set. The rule applied throughout: a label value must come
