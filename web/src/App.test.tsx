@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { axe } from 'vitest-axe';
 import { HttpResponse, http } from 'msw';
 import { App } from './App';
@@ -84,6 +85,28 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getAllByRole('table').length).toBeGreaterThan(1);
     });
+
+    const results = await axe(container);
+    expect(results.violations).toEqual([]);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('has no accessibility violations with an order detail open', async () => {
+    const user = userEvent.setup();
+    vi.stubGlobal('EventSource', SilentEventSource);
+
+    server.use(
+      http.get('/api/v1/orders', () =>
+        HttpResponse.json({ items: [sampleOrder], total: 1, limit: 20, offset: 0 }),
+      ),
+      http.get('/api/v1/orders/:id', () => HttpResponse.json(sampleOrder)),
+    );
+
+    const { container } = renderWithClient(<App />);
+
+    await user.click(await screen.findByRole('button', { name: `Open order ${sampleOrder.id}` }));
+    await screen.findByRole('region', { name: 'Order detail' });
 
     const results = await axe(container);
     expect(results.violations).toEqual([]);
