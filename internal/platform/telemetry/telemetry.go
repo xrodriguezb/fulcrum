@@ -19,7 +19,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"go.opentelemetry.io/otel/trace"
 	"go.opentelemetry.io/otel/trace/noop"
 
@@ -46,6 +46,9 @@ func Setup(ctx context.Context, cfg config.Config) (func(context.Context) error,
 		return nil, err
 	}
 
+	// The schema url has to match the one resource.Default() carries, or the
+	// merge fails at startup with a conflicting schema error. Pinning it to the
+	// semconv package this build imports keeps the two in step.
 	attrs, err := resource.Merge(resource.Default(), resource.NewWithAttributes(
 		semconv.SchemaURL,
 		semconv.ServiceName(cfg.ServiceName),
