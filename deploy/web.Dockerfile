@@ -16,7 +16,11 @@ COPY api/openapi.yaml /api/openapi.yaml
 # would compile against a contract that no longer exists.
 RUN npm run generate:api && npm run build
 
-FROM nginxinc/nginx-unprivileged:1.27-alpine
+# Pinned to the stable line rather than a minor version: the nightly scan found
+# 1.27-alpine carrying 35 high and 2 critical advisories from an alpine release
+# it had stopped following. This tag tracks the maintained alpine base, which
+# currently scans clean.
+FROM nginxinc/nginx-unprivileged:1.30.5-alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
