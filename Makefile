@@ -80,6 +80,7 @@ fmt-check: ## fail if any file is not formatted
 	fi
 	@./scripts/check-forbidden-content.sh --all
 	@bash scripts/check-forbidden-content.test.sh >/dev/null
+	@bash scripts/staged-go-packages.test.sh >/dev/null
 ifeq ($(HAS_WEB),yes)
 	npm run --prefix $(WEB_DIR) format:check
 endif
@@ -160,6 +161,10 @@ e2e: ## compose smoke: primary flow, idempotency, broker kill and recovery
 
 .PHONY: load
 load: ## k6 load test against a running stack
+	# The scenario asserts that exactly the seeded quantity is created, so it
+	# refuses to run against inventory it did not set up. Seeding here is what
+	# lets the target work against a stack that was just brought up.
+	./scripts/seed.sh WIDGET-001 5 1050
 	# The container joins the compose network rather than using host networking,
 	# which does not reach published ports on every platform.
 	$(DOCKER) run --rm -i --network fulcrum_default -e API=http://api:8080 \
@@ -188,5 +193,6 @@ verify: fmt-check lint arch test test-race contract security build ## everything
 ci: verify test-int e2e ## everything CI runs, in CI order
 
 .PHONY: hooks-test
-hooks-test: ## self-test of the forbidden content scanner
+hooks-test: ## self-test of the shell scripts the hooks depend on
 	bash scripts/check-forbidden-content.test.sh
+	bash scripts/staged-go-packages.test.sh

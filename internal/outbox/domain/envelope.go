@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -103,8 +104,12 @@ func (e Envelope) Validate() error {
 	switch {
 	case e.ID == "":
 		return fmt.Errorf("%w: id is required", ErrInvalidEnvelope)
+	case !isCanonicalUUID(e.ID):
+		return fmt.Errorf("%w: id %q is not a canonical uuid", ErrInvalidEnvelope, e.ID)
 	case e.AggregateID == "":
 		return fmt.Errorf("%w: aggregate_id is required", ErrInvalidEnvelope)
+	case !isCanonicalUUID(e.AggregateID):
+		return fmt.Errorf("%w: aggregate_id %q is not a canonical uuid", ErrInvalidEnvelope, e.AggregateID)
 	case e.AggregateType == "":
 		return fmt.Errorf("%w: aggregate_type is required", ErrInvalidEnvelope)
 	case e.EventType == "":
@@ -126,4 +131,38 @@ func (e Envelope) Validate() error {
 // so a consumer can subscribe to a family without a mapping table.
 func (e Envelope) Subject(prefix string) string {
 	return prefix + "." + e.EventType
+}
+
+// uuidGroupLengths is the 8-4-4-4-12 shape of a canonical UUID.
+var uuidGroupLengths = [5]int{8, 4, 4, 4, 12}
+
+// isCanonicalUUID reports whether the identifier has the shape every store of
+// these events keys them by.
+//
+// The deduplication row and the dead letter entry both hold the event id in a
+// uuid column. An identifier that is merely non-empty therefore passes this
+// validation and then fails the insert, and a consumer that cannot record a
+// failure cannot dead letter it either: the delivery goes back to the broker and
+// returns forever. Checking the shape here turns that into an undecodable
+// payload, which the consumer already dead letters on the first delivery.
+//
+// The check is written out rather than taken from a uuid library because the
+// domain layer depends on the standard library alone, and the shape is fixed.
+func isCanonicalUUID(raw string) bool {
+	groups := strings.Split(raw, "-")
+	if len(groups) != len(uuidGroupLengths) {
+		return false
+	}
+	for i, group := range groups {
+		if len(group) != uuidGroupLengths[i] {
+			return false
+		}
+		for _, r := range group {
+			isHex := (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f') || (r >= 'A' && r <= 'F')
+			if !isHex {
+				return false
+			}
+		}
+	}
+	return true
 }

@@ -49,17 +49,16 @@ const (
 
 	CodeInventoryInsufficient = "INVENTORY_INSUFFICIENT"
 
-	CodeIdempotencyKeyRequired   = "IDEMPOTENCY_KEY_REQUIRED"
-	CodeIdempotencyKeyReuse      = "IDEMPOTENCY_KEY_REUSE"
-	CodeIdempotencyInProgress    = "IDEMPOTENCY_REQUEST_IN_PROGRESS"
-	CodeMethodNotAllowed         = "METHOD_NOT_ALLOWED"
-	CodeRequestTooLarge          = "REQUEST_TOO_LARGE"
-	CodeUnsupportedMediaType     = "UNSUPPORTED_MEDIA_TYPE"
-	CodeInternal                 = "INTERNAL_ERROR"
-	CodeServiceUnavailable       = "SERVICE_UNAVAILABLE"
-	CodeEventPayloadInvalid      = "EVENT_PAYLOAD_INVALID"
-	CodeEventVersionUnsupported  = "EVENT_VERSION_UNSUPPORTED"
-	CodeConcurrentUpdateConflict = "CONCURRENT_UPDATE_CONFLICT"
+	CodeIdempotencyKeyRequired  = "IDEMPOTENCY_KEY_REQUIRED"
+	CodeIdempotencyKeyReuse     = "IDEMPOTENCY_KEY_REUSE"
+	CodeIdempotencyInProgress   = "IDEMPOTENCY_REQUEST_IN_PROGRESS"
+	CodeMethodNotAllowed        = "METHOD_NOT_ALLOWED"
+	CodeRequestTooLarge         = "REQUEST_TOO_LARGE"
+	CodeUnsupportedMediaType    = "UNSUPPORTED_MEDIA_TYPE"
+	CodeInternal                = "INTERNAL_ERROR"
+	CodeServiceUnavailable      = "SERVICE_UNAVAILABLE"
+	CodeEventPayloadInvalid     = "EVENT_PAYLOAD_INVALID"
+	CodeEventVersionUnsupported = "EVENT_VERSION_UNSUPPORTED"
 )
 
 // genericPublicMessage is returned for anything the system did not classify,

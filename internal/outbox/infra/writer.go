@@ -5,7 +5,6 @@ import (
 	"context"
 
 	"github.com/xrodriguezb/fulcrum/internal/outbox/domain"
-	"github.com/xrodriguezb/fulcrum/internal/platform/errs"
 	"github.com/xrodriguezb/fulcrum/internal/platform/postgres"
 )
 
@@ -32,14 +31,14 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())`
 	executor := w.tx.Executor(ctx)
 	for _, envelope := range envelopes {
 		if err := envelope.Validate(); err != nil {
-			return errs.Internal("append outbox event", err)
+			return postgres.Fault("append outbox event", err)
 		}
 		_, err := executor.Exec(ctx, statement,
 			envelope.ID, envelope.AggregateID, envelope.AggregateType, envelope.EventType,
 			envelope.EventVersion, []byte(envelope.Payload), envelope.CorrelationID,
 			nullableText(envelope.TraceID), envelope.OccurredAt)
 		if err != nil {
-			return errs.Internal("append outbox event", err)
+			return postgres.Fault("append outbox event", err)
 		}
 	}
 	return nil

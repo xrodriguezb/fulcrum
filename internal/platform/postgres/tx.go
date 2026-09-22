@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -69,7 +68,10 @@ func (m *TxManager) WithinTx(ctx context.Context, fn func(ctx context.Context) e
 
 	tx, err := m.pool.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("begin transaction: %w", err)
+		// Classified rather than merely wrapped: a transaction that cannot begin
+		// is almost always the database being unreachable, and that is the case
+		// a caller most needs told apart from a defect in the statement.
+		return Fault("begin transaction", err)
 	}
 
 	committed := false
@@ -83,7 +85,7 @@ func (m *TxManager) WithinTx(ctx context.Context, fn func(ctx context.Context) e
 		if !committed {
 			if rollbackErr := tx.Rollback(context.WithoutCancel(ctx)); rollbackErr != nil &&
 				!errors.Is(rollbackErr, pgx.ErrTxClosed) {
-				err = errors.Join(err, fmt.Errorf("rollback: %w", rollbackErr))
+				err = errors.Join(err, Fault("rollback transaction", rollbackErr))
 			}
 		}
 	}()
@@ -93,7 +95,7 @@ func (m *TxManager) WithinTx(ctx context.Context, fn func(ctx context.Context) e
 	}
 
 	if commitErr := tx.Commit(ctx); commitErr != nil {
-		return fmt.Errorf("commit transaction: %w", commitErr)
+		return Fault("commit transaction", commitErr)
 	}
 	committed = true
 	return nil

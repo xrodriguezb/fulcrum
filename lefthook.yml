@@ -24,12 +24,16 @@ pre-commit:
         if [ -n "$out" ]; then echo "goimports needed:"; echo "$out"; exit 1; fi
     go-vet:
       glob: "*.go"
+      # set -e matters: an empty selection and a selector that failed look the
+      # same to the reader below, and the second must not pass for the first.
       run: |
+        set -e
         pkgs="$(./scripts/staged-go-packages.sh {staged_files})"
         if [ -n "$pkgs" ]; then go vet $pkgs; else echo "no compilable package staged"; fi
     golangci-lint:
       glob: "*.go"
       run: |
+        set -e
         pkgs="$(./scripts/staged-go-packages.sh {staged_files})"
         if [ -n "$pkgs" ]; then "$(go env GOPATH)/bin/golangci-lint" run --fast-only $pkgs; else echo "no compilable package staged"; fi
     gitleaks:

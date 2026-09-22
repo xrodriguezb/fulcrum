@@ -70,6 +70,14 @@ use open qw(:std :encoding(UTF-8));
 my @files = grep { length } split /\n/, ($ENV{PERL_FILES_JOINED} // q{});
 my $violations = 0;
 
+sub is_binary {
+  my ($path) = @_;
+  open my $probe, "<:raw", $path or return 0;
+  read $probe, my $head, 8192;
+  close $probe;
+  return defined($head) && $head =~ /\0/;
+}
+
 my @rules = (
   { name => "emoji",         re => qr/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{FE0F}\x{200D}\x{24C2}\x{3030}\x{303D}]/ },
   { name => "em dash U+2014", re => qr/\x{2014}/ },
@@ -79,6 +87,13 @@ my @rules = (
 );
 
 for my $file (@files) {
+  # A file with a NUL byte is not text, and decoding it as UTF-8 produces
+  # hundreds of warnings per file on stderr. Violations are reported on stderr
+  # too, so that noise is where a real one would go unnoticed.
+  if (is_binary($file)) {
+    next;
+  }
+
   open my $fh, "<", $file or next;
   my $lineno = 0;
   while (my $line = <$fh>) {

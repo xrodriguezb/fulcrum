@@ -79,6 +79,19 @@ func TestEnvelopeValidation(t *testing.T) {
 		"empty payload":          func(e domain.Envelope) domain.Envelope { e.Payload = nil; return e },
 		"missing correlation id": func(e domain.Envelope) domain.Envelope { e.CorrelationID = ""; return e },
 		"zero occurred at":       func(e domain.Envelope) domain.Envelope { e.OccurredAt = time.Time{}; return e },
+		// The stores that key events by these two fields hold them in uuid
+		// columns, so an identifier of the wrong shape is rejected here rather
+		// than by an insert the consumer cannot recover from.
+		"id that is not a uuid": func(e domain.Envelope) domain.Envelope { e.ID = "not-a-uuid"; return e },
+		"id missing a group":    func(e domain.Envelope) domain.Envelope { e.ID = "6f1a2b3c-4d5e-4f60-8172"; return e },
+		"id with a non hex digit": func(e domain.Envelope) domain.Envelope {
+			e.ID = "6f1a2b3g-4d5e-4f60-8172-839405a6b7c8"
+			return e
+		},
+		"aggregate id that is not a uuid": func(e domain.Envelope) domain.Envelope {
+			e.AggregateID = "order-42"
+			return e
+		},
 	}
 
 	for name, mutate := range cases {

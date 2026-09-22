@@ -40,13 +40,19 @@ class FakeEventSource {
   }
 }
 
+/** These mirror the constants the hook uses, so the timers advance far enough. */
+const pollInterval = 3000;
+const reconnectDelay = 5000;
+
 describe('OperationsPanel', () => {
   beforeEach(() => {
     FakeEventSource.instances = [];
     vi.stubGlobal('EventSource', FakeEventSource);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -147,6 +153,61 @@ describe('OperationsPanel', () => {
     await waitFor(() => {
       expect(screen.getByRole('img')).toHaveAccessibleName(/now 5, peak 11/);
     });
+  });
+
+  // A reconnection must leave one source of updates, not two. The stream going
+  // down starts polling, and the stream coming back has to stop it again, even
+  // when a poll request is still in flight at the moment it returns: the request
+  // that lands afterwards is what schedules the next one.
+  it('stops polling once the stream comes back', async () => {
+    let polls = 0;
+    const held: { release: (() => void) | null } = { release: null };
+    server.use(
+      http.get('/api/v1/ops/outbox', async () => {
+        polls += 1;
+        if (polls === 2) {
+          await new Promise<void>((resolve) => {
+            held.release = resolve;
+          });
+        }
+        return HttpResponse.json(emptySnapshot);
+      }),
+    );
+
+    renderWithClient(<OperationsPanel />);
+    expect(await screen.findByText('Outbox pending')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(polls).toBe(1);
+    });
+
+    const first = FakeEventSource.instances[0];
+    expect(first).toBeDefined();
+    if (first === undefined) return;
+
+    // The stream drops, so polling takes over and its request is left in flight.
+    first.emit('error');
+    await waitFor(() => {
+      expect(polls).toBe(2);
+    });
+    await waitFor(() => {
+      expect(held.release).not.toBeNull();
+    });
+
+    // The stream comes back and opens while that request is still outstanding.
+    await vi.advanceTimersByTimeAsync(reconnectDelay);
+    const second = FakeEventSource.instances[1];
+    expect(second).toBeDefined();
+    if (second === undefined) return;
+    second.emit('open');
+    await waitFor(() => {
+      expect(screen.getByText('live')).toBeInTheDocument();
+    });
+
+    // Only now does the outstanding poll return.
+    held.release?.();
+    await vi.advanceTimersByTimeAsync(pollInterval * 3);
+
+    expect(polls).toBe(2);
   });
 
   it('does not draw a trend from a single snapshot', async () => {

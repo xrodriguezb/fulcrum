@@ -76,7 +76,7 @@ func (r *Reserver) Reserve(ctx context.Context, requests []app.ReservationReques
 			// the guard refused. The two are different answers to the caller.
 			return nil, r.explainMiss(ctx, request)
 		default:
-			return nil, errs.Internal("reserve inventory", fmt.Errorf("reserve %s: %w", request.SKU, scanErr))
+			return nil, postgres.Fault("reserve inventory", fmt.Errorf("reserve %s: %w", request.SKU, scanErr))
 		}
 	}
 
@@ -92,7 +92,7 @@ ORDER  BY sku`
 
 	rows, err := r.tx.Executor(ctx).Query(ctx, query)
 	if err != nil {
-		return nil, errs.Internal("list inventory", err)
+		return nil, postgres.Fault("list inventory", err)
 	}
 	defer rows.Close()
 
@@ -101,12 +101,12 @@ ORDER  BY sku`
 		var item app.Item
 		if scanErr := rows.Scan(&item.SKU, &item.Available, &item.Reserved,
 			&item.UnitPriceCents, &item.Currency, &item.Version); scanErr != nil {
-			return nil, errs.Internal("scan inventory", scanErr)
+			return nil, postgres.Fault("scan inventory", scanErr)
 		}
 		items = append(items, item)
 	}
 	if rows.Err() != nil {
-		return nil, errs.Internal("iterate inventory", rows.Err())
+		return nil, postgres.Fault("iterate inventory", rows.Err())
 	}
 	return items, nil
 }
@@ -122,7 +122,7 @@ func (r *Reserver) explainMiss(ctx context.Context, request app.ReservationReque
 		return errs.NotFound(errs.CodeValidationFailed,
 			fmt.Sprintf("Unknown sku %s.", request.SKU), domain.ErrInvalidSKU)
 	case err != nil:
-		return errs.Internal("classify reservation miss", err)
+		return postgres.Fault("classify reservation miss", err)
 	default:
 		return errs.Conflict(errs.CodeInventoryInsufficient,
 			"The requested quantity is no longer available.",

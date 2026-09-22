@@ -44,6 +44,12 @@ expect 1 "dingbat emoji is rejected" "${tmp}/checkmark.md"
 printf 'An en dash \xe2\x80\x93 is allowed, and a hyphen - is allowed.\n' > "${tmp}/allowed.md"
 expect 0 "en dash and hyphen are allowed" "${tmp}/allowed.md"
 
+# A captured profile and a compiled asset are tracked files. Decoding them as
+# text produced thousands of warnings on the same stream the violations are
+# reported on, which is where a real one would be missed.
+printf 'binary\x00\xe2\x80\x94payload\n' > "${tmp}/profile.pprof"
+expect 0 "a binary file is skipped" "${tmp}/profile.pprof"
+
 if [ "${failures}" -ne 0 ]; then
   echo "${failures} scanner self-test(s) failed"
   exit 1
