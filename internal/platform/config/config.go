@@ -47,8 +47,9 @@ type Config struct {
 	Profiling   ProfilingConfig
 }
 
-// ProfilingConfig decides whether the runtime profiles are served. It is not
-// read yet.
+// ProfilingConfig decides whether the runtime profiles are served. The address
+// is not configurable: the listener binds loopback, because a profile endpoint
+// is an information leak and a denial of service in one url.
 type ProfilingConfig struct {
 	Enabled bool
 	Port    int
@@ -221,6 +222,11 @@ func Load(lookup LookupFunc) (Config, error) {
 		CORSAllowedOrigins: corsOrigins(lookup, cfg.Env, &c),
 	}
 
+	cfg.Profiling = ProfilingConfig{
+		Enabled: boolValue(lookup, "PPROF_ENABLED", false, &c),
+		Port:    port(lookup, "PPROF_PORT", 6060, &c),
+	}
+
 	cfg.Worker = WorkerConfig{
 		MetricsPort:     port(lookup, "WORKER_METRICS_PORT", 8081, &c),
 		ShutdownTimeout: duration(lookup, "WORKER_SHUTDOWN_TIMEOUT", 20*time.Second, &c),
@@ -292,6 +298,9 @@ func crossValidate(cfg Config, c *collector) {
 	}
 	if cfg.HTTP.Port == cfg.Worker.MetricsPort {
 		c.add("WORKER_METRICS_PORT", "must differ from HTTP_PORT")
+	}
+	if cfg.Profiling.Enabled && (cfg.Profiling.Port == cfg.HTTP.Port || cfg.Profiling.Port == cfg.Worker.MetricsPort) {
+		c.add("PPROF_PORT", "must differ from HTTP_PORT and WORKER_METRICS_PORT")
 	}
 	// A lease shorter than a publish would let a second instance claim a row
 	// that is still in flight, which is how an event gets published twice.

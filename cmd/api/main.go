@@ -13,6 +13,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/xrodriguezb/fulcrum/internal/api"
 	idempotencyinfra "github.com/xrodriguezb/fulcrum/internal/idempotency/infra"
@@ -27,6 +28,7 @@ import (
 	"github.com/xrodriguezb/fulcrum/internal/platform/logging"
 	"github.com/xrodriguezb/fulcrum/internal/platform/messaging"
 	"github.com/xrodriguezb/fulcrum/internal/platform/postgres"
+	"github.com/xrodriguezb/fulcrum/internal/platform/profiling"
 	"github.com/xrodriguezb/fulcrum/internal/platform/telemetry"
 )
 
@@ -132,14 +134,28 @@ func run() error {
 		Chain:    chain,
 	})
 
-	return httpx.Serve(ctx, httpx.ServerConfig{
-		Addr:              net.JoinHostPort("", strconv.Itoa(cfg.HTTP.Port)),
-		Handler:           router,
-		ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
-		ReadTimeout:       cfg.HTTP.ReadTimeout,
-		WriteTimeout:      cfg.HTTP.WriteTimeout,
-		IdleTimeout:       cfg.HTTP.IdleTimeout,
-		ShutdownTimeout:   cfg.HTTP.ShutdownTimeout,
-		Logger:            logger,
+	// Profiling runs beside the api rather than on it: the profiles must never
+	// be reachable on the port that serves customers.
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		return profiling.Serve(groupCtx, profiling.Config{
+			Enabled: cfg.Profiling.Enabled,
+			Port:    cfg.Profiling.Port,
+		}, logger)
 	})
+
+	group.Go(func() error {
+		return httpx.Serve(groupCtx, httpx.ServerConfig{
+			Addr:              net.JoinHostPort("", strconv.Itoa(cfg.HTTP.Port)),
+			Handler:           router,
+			ReadHeaderTimeout: cfg.HTTP.ReadHeaderTimeout,
+			ReadTimeout:       cfg.HTTP.ReadTimeout,
+			WriteTimeout:      cfg.HTTP.WriteTimeout,
+			IdleTimeout:       cfg.HTTP.IdleTimeout,
+			ShutdownTimeout:   cfg.HTTP.ShutdownTimeout,
+			Logger:            logger,
+		})
+	})
+
+	return group.Wait()
 }
