@@ -151,3 +151,46 @@ func TestSweepRemovesOnlyExpiredKeys(t *testing.T) {
 		t.Errorf("the expired key survived the sweep")
 	}
 }
+
+// A completed key must survive a late failure report.
+//
+// The use case releases the key when the business transaction returns an error.
+// A commit that reached the server and then lost its acknowledgement returns an
+// error to a caller whose work is committed, so the release arrives for a key
+// that is already completed. Letting it through would mark a successful request
+// as failed, and the store hands a failed key to the next claim: the retry would
+// create a second order and reserve the stock twice.
+func TestFailDoesNotReopenACompletedKey(t *testing.T) {
+	store, _ := newStore(t)
+	ctx := t.Context()
+
+	if _, err := store.Claim(ctx, "key-committed", []byte("fingerprint"), time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("claim: %v", err)
+	}
+	if err := store.Complete(ctx, "key-committed", 201, []byte(`{"id":"the-first-response"}`), ""); err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+
+	if err := store.Fail(ctx, "key-committed", "the commit acknowledgement was lost"); err != nil {
+		t.Fatalf("fail: %v", err)
+	}
+
+	record, err := store.Get(ctx, "key-committed")
+	if err != nil {
+		t.Fatalf("read the record: %v", err)
+	}
+	if record.Status != idempotencyapp.StatusCompleted {
+		t.Errorf("status = %q, want completed: a committed request must not be reopened", record.Status)
+	}
+	if string(record.ResponseBody) != `{"id":"the-first-response"}` {
+		t.Errorf("the stored response was replaced: %s", record.ResponseBody)
+	}
+
+	again, err := store.Claim(ctx, "key-committed", []byte("fingerprint"), time.Now().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("second claim: %v", err)
+	}
+	if again.Claimed {
+		t.Errorf("a retry took over a completed key, which would create a second order")
+	}
+}

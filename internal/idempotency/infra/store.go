@@ -97,13 +97,21 @@ WHERE  key = $1`
 //
 // The reason is stored for operators, truncated, and never echoed to a client:
 // it can carry the text of an infrastructure error.
+//
+// Only a claim that is still in progress can be failed. A commit that reached
+// the server and then lost its acknowledgement returns an error to a caller
+// whose work is committed, and the caller releases the key on the way out.
+// Without the guard that release would mark a successful request as failed and
+// destroy the response stored for replay, and the next claim takes over a failed
+// key: the retry would create a second order against stock already reserved.
 func (s *Store) Fail(ctx context.Context, key, reason string) error {
 	const statement = `
 UPDATE idempotency_keys
 SET    status       = 'failed',
        completed_at = now(),
        response_body = json_build_object('reason', left($2, 500))::text
-WHERE  key = $1`
+WHERE  key = $1
+  AND  status = 'in_progress'`
 
 	if _, err := s.tx.Executor(ctx).Exec(ctx, statement, key, reason); err != nil {
 		return errs.Internal("fail idempotency key", err)
