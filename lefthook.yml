@@ -25,13 +25,13 @@ pre-commit:
     go-vet:
       glob: "*.go"
       run: |
-        pkgs="$(for f in {staged_files}; do dirname "$f"; done | sort -u | sed 's|^|./|')"
-        go vet $pkgs
+        pkgs="$(./scripts/staged-go-packages.sh {staged_files})"
+        if [ -n "$pkgs" ]; then go vet $pkgs; else echo "no compilable package staged"; fi
     golangci-lint:
       glob: "*.go"
       run: |
-        pkgs="$(for f in {staged_files}; do dirname "$f"; done | sort -u | sed 's|^|./|')"
-        "$(go env GOPATH)/bin/golangci-lint" run --fast-only $pkgs
+        pkgs="$(./scripts/staged-go-packages.sh {staged_files})"
+        if [ -n "$pkgs" ]; then "$(go env GOPATH)/bin/golangci-lint" run --fast-only $pkgs; else echo "no compilable package staged"; fi
     gitleaks:
       run: '"$(go env GOPATH)/bin/gitleaks" protect --staged --redact --no-banner'
     web-typecheck:
