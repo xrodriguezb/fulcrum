@@ -90,7 +90,7 @@ the whole stack in Docker Desktop:
 | offered | achieved | created | dropped | p50 | p95 | p99 |
 | --- | --- | --- | --- | --- | --- | --- |
 | 100 /s | 100.0 /s | 3001 | 0 | 1.9 ms | 3.9 ms | 5.8 ms |
-| 1000 /s | 998.5 /s | 20001 | 0 | 2.2 ms | 29.1 ms | 50.4 ms |
+| 1000 /s | 999.9 /s | 30001 | 0 | 2.4 ms | 30.0 ms | 43.8 ms |
 | 2500 /s | 1018.1 /s | 25046 | 24955 | 4612.6 ms | 4831.2 ms | 4844.7 ms |
 
 The third row is the ceiling, and it is reported rather than trimmed. At 2500
@@ -98,6 +98,17 @@ offered orders a second the machine sustains about a thousand, k6 cannot start
 the rest, and the requests that do run queue for four and a half seconds. The
 run fails its thresholds, which is the correct outcome: a load test that only
 reports rates the system can meet is a load test that never finds the limit.
+
+The delivered rate at a thousand a second repeats; the tail does not. Four runs
+of that row on the same machine, minutes apart and with nothing else changed,
+gave a p95 of 30.0, 183.0, 186.7 and 30.0 ms while the achieved rate stayed
+within a tenth of a percent every time. The table reports one run of each row,
+so read the p95 as the better half of a bimodal distribution rather than as a
+number this laptop delivers reliably. The likely cause is the host, not the
+write path: Docker Desktop shares a virtual machine with everything else running
+on a development laptop. A number measured on dedicated hardware would mean
+something; this one says the throughput holds and the tail is not worth
+quoting to three significant figures.
 
 Nothing was oversold at any rate, and no order was refused while stock lasted.
 The arrival rate is open by design. A fixed pool of virtual users would have
