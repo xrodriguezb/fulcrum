@@ -5,6 +5,38 @@ the versions follow [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+A second independent audit. Twelve defects, detailed in
+`docs/engineering-report.md` under "Second audit".
+
+- An idempotency key could be reopened after its transaction had committed, so
+  a retry of an order that had already succeeded created a second one against
+  stock reserved twice. It needed a commit acknowledgement to be lost, which is
+  rare and not impossible.
+- An event carrying an identifier the stores could not hold was redelivered
+  forever instead of reaching the dead letter queue, because the queue could
+  not accept it either.
+- The pre-commit hook reported that `go vet` and `golangci-lint` had passed
+  while analysing nothing, on any machine whose bash predates version 4.
+- Listings reported a total of zero past the last page, and computed that total
+  by carrying it on every row of a full table scan.
+- The console kept its polling fallback running after the event stream
+  reconnected, and started another one on every subsequent drop.
+- A database that could not be reached answered 500 rather than 503, telling
+  clients not to retry during an outage.
+- The forbidden content scanner decoded binary files as text, burying anything
+  it found under thousands of warnings on the same stream.
+
+### Changed
+
+- The console container runs with a read only root filesystem and no
+  capabilities, matching the two services behind it.
+- `POST /api/v1/orders` and the other endpoints that read the database declare
+  503 in the OpenAPI description, which they can now return.
+- The example environment file documents ten variables that previously existed
+  only in the configuration source, and a test keeps the two together.
+
 ## [0.1.0] - 2026-09-22
 
 First release. The system exists to make one claim falsifiable: inventory

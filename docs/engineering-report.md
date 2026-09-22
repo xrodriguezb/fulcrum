@@ -221,6 +221,125 @@ The nightly image scan then found 35 high and 2 critical advisories in the
 published console image, inherited from a base image that went stale in place
 after weeks of green pull request pipelines. That is the check earning its place.
 
+## Second audit
+
+A second pass went over the repository on the assumption that the first audit had
+also been wrong. Twelve defects were found and fixed. The ones that matter were
+again found by running the system rather than by reading it, and two of them were
+in the machinery that was supposed to be doing the finding.
+
+| # | Severity | Component | Finding | Commit |
+| --- | --- | --- | --- | --- |
+| 1 | must fix | consumer | an event id the stores cannot hold loops forever | `69c7c51` |
+| 2 | must fix | pipeline | pre-commit vet and lint analysed nothing | `9ea3ebb` |
+| 3 | must fix | listings | page totals wrong past the end, and a full scan per page | `5d8ed1c` |
+| 4 | blocker | idempotency | a committed key could be reopened and the order duplicated | `21a9c6d` |
+| 5 | must fix | console | a reconnected stream left the polling fallback running | `adda024` |
+| 6 | should fix | deployment | the published container was the least hardened one | `e8ed73d` |
+| 7 | must fix | error contract | a database outage answered 500 rather than 503 | `5443459` |
+| 8 | should fix | configuration | ten tunables existed only in the source | `836d192` |
+| 9 | should fix | error contract | an error code the system never emits | `de97903` |
+| 10 | should fix | load testing | the oversell scenario could not run from a fresh stack | `9a73841` |
+| 11 | should fix | documentation | a variable latency reported as a stable one | `29ee684` |
+| 12 | should fix | pipeline | the content scanner drowned its own output in binary | `6ba1589` |
+
+**1. A poison event that could never be dead lettered.** An envelope only had to
+carry a non-empty id, while the deduplication row and the dead letter entry both
+keep it in a uuid column. An envelope that decoded with an id of any other shape
+failed the deduplication insert, which is classified as unavailable and therefore
+retried, and then failed the dead letter insert too. A consumer that cannot
+record a failure cannot terminate the delivery, so the message went back to the
+broker and came round again forever. The test that found it watched ninety
+seconds of redelivery with nothing in the queue an operator reads. The envelope
+now validates the shape of both identifiers, which turns the case into an
+undecodable payload, and those were already dead lettered on the first delivery.
+
+**2. The pre-commit hook analysed nothing.** The script that turns staged files
+into package directories deduplicated with an associative array, which needs bash
+4. The bash on the path of a macOS machine is 3.2, where `declare -A` fails, so
+the script printed nothing and exited 2. Its callers read only its output and
+treat an empty selection as a commit with no Go in it, so `go vet` and
+`golangci-lint` both reported success while looking at nothing. Every Go commit
+in this repository had been pushed without either of them running locally, which
+is the explanation for lint failures reaching the pipeline earlier. The selector
+is now portable, the callers fail when it fails, and a self-test covers the cases
+including the exit status.
+
+**3. Listings counted the whole table on every page.** Both listings carried the
+collection total on the rows of the page through `count(*) OVER ()`. A page past
+the last one has no rows to carry it, so with 71237 orders in the table an offset
+of 999999 answered that the collection was empty, which a console pager cannot
+recover from. It was also expensive: that window carried every column of every
+row through the aggregate, so a twenty row page touched 62422 buffers and spilled
+465 blocks to a temporary file in 32 ms. Counting in its own statement is 1071
+buffers and 9 ms, and the page alone is 23 buffers.
+
+**4. A committed order could be created twice.** The use case releases the
+idempotency key whenever the business transaction returns an error, and the
+release was unconditional. A commit that reaches the server and then loses its
+acknowledgement returns an error to a caller whose work is committed, so the
+release arrived for a key the same transaction had just completed: it overwrote
+the status with failed and replaced the stored response with the failure reason.
+The store hands a failed key to the next claim by design, so the client's retry
+then won the claim and ran the whole use case again, against stock reserved a
+second time. The release now applies only while the claim is still in progress.
+This is the one finding in the audit that could corrupt business state, and it
+needed a partition at exactly the wrong moment to happen.
+
+**5. The console kept polling after the stream came back.** Stopping the polling
+fallback cleared the pending timer, but a request already in flight schedules the
+next one when it lands, and that request routinely outlives the reconnection: the
+poll interval is three seconds and the reconnect delay is five. Every drop left
+another polling loop behind. A test that holds a poll open across the
+reconnection sees five requests where two are correct.
+
+**6. The exposed container was the least hardened.** The api and the worker run
+with a read only root filesystem and every capability dropped. The console, which
+is the only service published on a host port, had neither. It now has both, with
+tmpfs for the two directories nginx writes.
+
+**7. A database outage looked like a bug.** Every failure the postgres
+repositories returned was classified as internal, so with the database stopped,
+creating an order answered 500 while readiness correctly answered 503. The two
+say different things: 500 tells a client the request will fail the same way again
+and tells an operator to look for a defect in the order path. Driver errors now
+go through one classifier, where the connection, resource and operator
+intervention SQLSTATE classes are unavailable and a constraint violation or a bad
+scan stays internal. The operation name travels in the cause for the log rather
+than in the message, so a client learns nothing about the statement that failed.
+
+**8 through 12** are smaller: ten environment variables that were read by the
+configuration and documented nowhere, among them the outbox claim lease and the
+pool timeouts, now with a test that fails on any future drift; an error code
+declared in the public contract and never emitted; a load scenario that refused
+to run against a stack that had just been brought up, which is the scenario
+proving nothing is oversold; a latency figure in this document that four re-runs
+showed to be bimodal, now reported as such; and a content scanner that decoded
+the captured profile as text and put 4823 warnings on the same stream it reports
+violations on, which is where a real violation would have been missed.
+
+### What the audit did not find
+
+The suite is not theatre. Removing the sku ordering from the reservation made the
+multi-item test fail three times out of three with a real PostgreSQL deadlock, and
+changing the guard on the reservation would be caught by the oversell test's exact
+counts. The central invariant was re-proved independently through the HTTP API
+against the running stack: two hundred concurrent requests against five units gave
+five creations, a hundred and ninety-five conflicts, zero available, five
+reserved and nothing oversold. A hundred concurrent requests sharing one
+idempotency key gave one order, ninety-nine identical replays and one in-progress
+conflict. Semantically identical json with reordered keys replayed; the same key
+with a different body was refused.
+
+Hostile input was answered correctly without leaking: injection strings, script
+tags, malformed and deeply nested json, oversized and mistyped bodies, unexpected
+methods, huge identifiers and out of range pagination all produced problem
+documents carrying a trace id and no driver text, query, path or host. Route
+labels are patterns rather than paths, so metric cardinality stays bounded. Every
+declared metric has a site that increments it. `govulncheck`, `npm audit` and
+`trivy` are clean. No exported symbol in the production packages is unused, and
+every linter suppression names its reason.
+
 ## Known limitations
 
 - No authentication. Anyone who can reach the API can create and read orders.
