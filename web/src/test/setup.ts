@@ -17,3 +17,8 @@ afterEach(() => {
 afterAll(() => {
   server.close();
 });
+
+// jsdom implements no layout, so it has no scrollIntoView. Stubbing it here
+// keeps the component calling the method every browser does, rather than
+// carrying a feature check that exists only to satisfy the test environment.
+Element.prototype.scrollIntoView = function scrollIntoView(): void {};
