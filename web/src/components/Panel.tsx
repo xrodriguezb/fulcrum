@@ -8,10 +8,15 @@ interface PanelProps {
   readonly children: ReactNode;
 }
 
-/** Panel is a labelled region, so screen reader users can navigate between them. */
+/**
+ * Panel is a labelled region, so screen reader users can navigate between them.
+ *
+ * The region takes tabIndex -1 rather than 0: it is a jump target for the panel
+ * navigation, not another stop in an already long tab order.
+ */
 export function Panel({ title, id, actions, children }: PanelProps): ReactNode {
   return (
-    <section className="panel" aria-labelledby={id}>
+    <section className="panel" id={regionId(id)} aria-labelledby={id} tabIndex={-1}>
       {/*
         A div rather than a header element: a header nested in a section is not a
         banner landmark by specification, but role mapping implementations
@@ -25,6 +30,11 @@ export function Panel({ title, id, actions, children }: PanelProps): ReactNode {
       {children}
     </section>
   );
+}
+
+/** regionId derives the element id of a panel region from its heading id. */
+export function regionId(headingId: string): string {
+  return `${headingId}-region`;
 }
 
 interface StateViewProps<T> {
