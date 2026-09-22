@@ -95,9 +95,12 @@ broker being killed and the backlog draining afterwards.
 ![The Fulcrum operations console](docs/images/console.png)
 
 Live outbox depth and dead letter count over server sent events with a polling
-fallback, optimistic order creation that rolls back on a 409, per panel error
-boundaries, and zero accessibility violations under axe. The same page at 375px
-is in `docs/images/console-375px.png`.
+fallback, a sparkline of the depth over the last sixty samples so a recovery is
+visible after the peak has passed, optimistic order creation that rolls back on
+a 409, an order detail that reads the order by id rather than from the list
+cache, panel navigation that moves focus rather than only scrolling, per panel
+error boundaries, and zero accessibility violations under axe. The same page at
+375px is in `docs/images/console-375px.png`.
 
 ## Reading it in thirty minutes
 
