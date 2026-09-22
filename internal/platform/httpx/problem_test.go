@@ -71,7 +71,7 @@ func TestProblemCarriesTheStableCodeAndStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			recorder := httptest.NewRecorder()
-			request := httptest.NewRequest(http.MethodPost, "/api/v1/orders", nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/orders", nil)
 
 			httpx.WriteProblem(recorder, request, tc.err, logging.NewJSON(discard{}, 0))
 
@@ -108,7 +108,7 @@ func TestProblemNeverLeaksInfrastructureDetail(t *testing.T) {
 	wrapped := errs.Internal("persist the order", cause)
 
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/orders", nil)
 	httpx.WriteProblem(recorder, request, wrapped, logging.NewJSON(discard{}, 0))
 
 	body := recorder.Body.String()
@@ -128,7 +128,7 @@ func TestProblemCarriesTheTraceID(t *testing.T) {
 	t.Parallel()
 
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/orders/1", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/v1/orders/1", nil)
 	ctx := logging.WithTraceID(request.Context(), "4bf92f3577b34da6a3ce929d0e0e4736")
 	request = request.WithContext(ctx)
 
@@ -144,7 +144,7 @@ func TestRetryAfterIsSetForAnInFlightDuplicate(t *testing.T) {
 	t.Parallel()
 
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/api/v1/orders", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/v1/orders", nil)
 	err := errs.Conflict(errs.CodeIdempotencyInProgress, "A request with this key is still in progress.", nil)
 
 	httpx.WriteProblem(recorder, request, err, logging.NewJSON(discard{}, 0))
