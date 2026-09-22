@@ -73,7 +73,9 @@ my $violations = 0;
 my @rules = (
   { name => "emoji",         re => qr/[\x{1F000}-\x{1FAFF}\x{2600}-\x{27BF}\x{2B00}-\x{2BFF}\x{FE0F}\x{200D}\x{24C2}\x{3030}\x{303D}]/ },
   { name => "em dash U+2014", re => qr/\x{2014}/ },
-  { name => "attribution footer", re => qr/(?i:co-authored-by|generated with)/ },
+  # The literals are spelled with escapes so this scanner does not flag its own
+  # source when it walks the whole tree.
+  { name => "attribution footer", re => qr/(?i:co-auth\x6fred-by|gener\x61ted with)/ },
 );
 
 for my $file (@files) {
