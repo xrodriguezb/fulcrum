@@ -136,8 +136,18 @@ services:
       start_period: 2s
     ports:
       - '${FULCRUM_WEB_PORT:-3000}:8080'
+    # The console is the only service published on a host port, and it serves
+    # static files through a proxy. It needs no capabilities and writes nothing
+    # outside the scratch directories nginx uses for request buffering, so it
+    # gets the same treatment as the two services behind it.
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
 
 volumes:
   postgres-data:
