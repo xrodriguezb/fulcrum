@@ -52,25 +52,34 @@ export function useOperationalState(): OperationalState {
     let source: EventSource | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+    // polling says whether the fallback is still wanted. Clearing the pending
+    // timer is not enough on its own: a request that is already in flight
+    // schedules the next one when it lands, so a stream that comes back while a
+    // poll is outstanding would leave the console with two sources of updates,
+    // and another one after every further reconnection.
+    let polling = false;
+
     const poll = (): void => {
+      polling = true;
       void api
         .snapshot()
         .then((next) => {
-          if (cancelled) return;
+          if (cancelled || !polling) return;
           record(next);
           setError(null);
         })
         .catch((cause: unknown) => {
-          if (cancelled) return;
+          if (cancelled || !polling) return;
           setError(toApiError(cause));
         })
         .finally(() => {
-          if (cancelled) return;
+          if (cancelled || !polling) return;
           pollTimer.current = setTimeout(poll, pollInterval);
         });
     };
 
     const stopPolling = (): void => {
+      polling = false;
       if (pollTimer.current !== null) {
         clearTimeout(pollTimer.current);
         pollTimer.current = null;
