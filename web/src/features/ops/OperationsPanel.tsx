@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Panel } from '../../components/Panel';
+import { Sparkline } from '../../components/Sparkline';
 import { useOperationalState } from './useOperationalState';
 
 /**
@@ -8,7 +9,7 @@ import { useOperationalState } from './useOperationalState';
  * letters, and idempotency claims that never completed.
  */
 export function OperationsPanel(): ReactNode {
-  const { snapshot, error, connection } = useOperationalState();
+  const { snapshot, error, connection, history } = useOperationalState();
 
   return (
     <Panel
@@ -37,7 +38,10 @@ export function OperationsPanel(): ReactNode {
         <dl className="metrics">
           <div>
             <dt>Outbox pending</dt>
-            <dd>{snapshot.outbox.pending}</dd>
+            <dd>
+              {snapshot.outbox.pending}
+              <Sparkline values={history} label="Outbox depth" />
+            </dd>
           </div>
           <div>
             <dt>Failing</dt>

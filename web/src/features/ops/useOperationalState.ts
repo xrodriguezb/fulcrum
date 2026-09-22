@@ -8,6 +8,8 @@ export interface OperationalState {
   readonly snapshot: OperationalSnapshot | null;
   readonly error: ApiError | null;
   readonly connection: StreamStatus;
+  /** history is the outbox depth of each snapshot seen, oldest first. */
+  readonly history: readonly number[];
 }
 
 /** pollInterval is the fallback cadence when the stream is unavailable. */
@@ -15,6 +17,14 @@ const pollInterval = 3000;
 
 /** reconnectDelay is how long the hook waits before trying the stream again. */
 const reconnectDelay = 5000;
+
+/**
+ * historyLimit bounds the series. The console runs for as long as a browser tab
+ * is open, so an unbounded array is a slow leak, and sixty samples is about
+ * three minutes of polling, which is the window an operator watches during a
+ * recovery.
+ */
+const historyLimit = 60;
 
 /**
  * useOperationalState keeps the console's live numbers current.
@@ -27,12 +37,18 @@ const reconnectDelay = 5000;
  */
 export function useOperationalState(): OperationalState {
   const [snapshot, setSnapshot] = useState<OperationalSnapshot | null>(null);
+  const [history, setHistory] = useState<readonly number[]>([]);
   const [error, setError] = useState<ApiError | null>(null);
   const [connection, setConnection] = useState<StreamStatus>('connecting');
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+
+    const record = (next: OperationalSnapshot): void => {
+      setSnapshot(next);
+      setHistory((current) => [...current, next.outbox.pending].slice(-historyLimit));
+    };
     let source: EventSource | null = null;
     let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -41,7 +57,7 @@ export function useOperationalState(): OperationalState {
         .snapshot()
         .then((next) => {
           if (cancelled) return;
-          setSnapshot(next);
+          record(next);
           setError(null);
         })
         .catch((cause: unknown) => {
@@ -79,7 +95,7 @@ export function useOperationalState(): OperationalState {
       source.addEventListener('snapshot', (event: MessageEvent<string>) => {
         if (cancelled) return;
         try {
-          setSnapshot(JSON.parse(event.data) as OperationalSnapshot);
+          record(JSON.parse(event.data) as OperationalSnapshot);
           setError(null);
         } catch (cause) {
           setError(toApiError(cause));
@@ -108,7 +124,7 @@ export function useOperationalState(): OperationalState {
     void api
       .snapshot()
       .then((next) => {
-        if (!cancelled) setSnapshot(next);
+        if (!cancelled) record(next);
       })
       .catch((cause: unknown) => {
         if (!cancelled) setError(toApiError(cause));
@@ -126,5 +142,5 @@ export function useOperationalState(): OperationalState {
     };
   }, []);
 
-  return { snapshot, error, connection };
+  return { snapshot, error, connection, history };
 }
