@@ -1,0 +1,7 @@
+# Sourced by the generated git hooks before lefthook is located. Tools installed by
+# `make setup` land in the Go bin directory, which is not on PATH on every machine,
+# and a hook that cannot find lefthook exits zero and silently enforces nothing.
+if [ -z "${LEFTHOOK_BIN:-}" ] && [ -x "$(go env GOPATH 2>/dev/null)/bin/lefthook" ]; then
+  LEFTHOOK_BIN="$(go env GOPATH)/bin/lefthook"
+  export LEFTHOOK_BIN
+fi

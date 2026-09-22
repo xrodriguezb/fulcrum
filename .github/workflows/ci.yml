@@ -1,0 +1,356 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A superseded run has nothing useful left to say, so it is cancelled instead of
+# spending runner minutes on a commit nobody is looking at any more.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Least privilege at the workflow level. A job that needs more asks for it.
+permissions:
+  contents: read
+
+env:
+  GO_TEST_TIMEOUT: 15m
+
+jobs:
+  detect-changes:
+    name: detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      go: ${{ steps.filter.outputs.go }}
+      web: ${{ steps.filter.outputs.web }}
+      docker: ${{ steps.filter.outputs.docker }}
+      contract: ${{ steps.filter.outputs.contract }}
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Classify the change
+        id: filter
+        uses: dorny/paths-filter@0e4a8c6effa4802afeda77dc8d303f8176d7dfad # v3
+        with:
+          filters: |
+            go:
+              - '**/*.go'
+              - 'go.mod'
+              - 'go.sum'
+              - 'migrations/**'
+              - 'Makefile'
+              - '.golangci.yml'
+              - '.github/workflows/ci.yml'
+            web:
+              - 'web/**'
+              - 'api/openapi.yaml'
+              - '.github/workflows/ci.yml'
+            docker:
+              - 'deploy/**'
+              - '**/Dockerfile'
+              - '.dockerignore'
+              - '.github/workflows/ci.yml'
+            contract:
+              - 'api/openapi.yaml'
+              - 'web/src/api/**'
+              - 'redocly.yaml'
+            # True when the change touches anything other than documentation, so a
+            # documentation-only pull request never spends twelve minutes on
+            # integration tests and image builds.
+            code:
+              - '!(docs/**|**/*.md|LICENSE)'
+
+  quality:
+    name: quality
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-go
+        with:
+          install-tools: 'true'
+
+      - name: Formatting and forbidden content
+        run: make fmt-check
+
+      - name: Lint
+        run: make lint
+
+      - name: Secret scan
+        run: gitleaks detect --redact --no-banner --exit-code 1
+
+      - name: Commit message format
+        if: github.event_name == 'pull_request'
+        run: |
+          npm ci --no-audit --fund=false
+          npx commitlint --from "${{ github.event.pull_request.base.sha }}" --to "${{ github.event.pull_request.head.sha }}"
+
+      - name: Record result
+        if: always()
+        run: echo "quality|${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
+
+  contract:
+    name: contract
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate the OpenAPI document
+        run: npx --yes @redocly/cli@1.34.5 lint api/openapi.yaml
+
+      - name: Assert generated types are current
+        run: |
+          set -euo pipefail
+          if [ ! -f web/package.json ]; then
+            echo "web client does not exist yet, nothing to regenerate"
+            exit 0
+          fi
+          npm ci --prefix web --no-audit --fund=false
+          npm run --prefix web generate:api
+          git diff --exit-code -- web/src/api/schema.d.ts
+
+  test-go-unit:
+    name: go unit tests
+    needs: detect-changes
+    if: needs.detect-changes.outputs.go == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: ./.github/actions/setup-go
+
+      - name: Unit tests with the race detector
+        run: go test -race -short -timeout "$GO_TEST_TIMEOUT" -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          set -euo pipefail
+          if [ -f coverage.out ]; then
+            total="$(go tool cover -func=coverage.out | tail -1 | awk '{print $3}')"
+            # Coverage is reported, never gated. See docs/ci-cd.md for why.
+            echo "Go coverage: ${total}" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: go-coverage
+          path: coverage.out
+          if-no-files-found: ignore
+
+  test-go-integration:
+    name: go integration tests
+    needs: test-go-unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        # The reservation strategy and SKIP LOCKED depend on database semantics,
+        # so the invariant is proven on both supported major versions.
+        postgres: ['15-alpine', '16-alpine']
+    env:
+      FULCRUM_TEST_POSTGRES_IMAGE: postgres:${{ matrix.postgres }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: ./.github/actions/setup-go
+
+      - name: Integration tests
+        run: make test-int
+
+  test-web:
+    name: web tests
+    needs: detect-changes
+    if: needs.detect-changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Web checks
+        run: |
+          set -euo pipefail
+          if [ ! -f web/package.json ]; then
+            echo "web workspace does not exist yet"
+            exit 0
+          fi
+          npm ci --prefix web --no-audit --fund=false
+          npm run --prefix web typecheck
+          npm run --prefix web lint
+          npm run --prefix web test -- --coverage
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: web-coverage
+          path: web/coverage
+          if-no-files-found: ignore
+
+  security:
+    name: security
+    needs: detect-changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: ./.github/actions/setup-go
+        with:
+          install-tools: 'true'
+
+      - name: Known vulnerabilities in Go dependencies
+        run: govulncheck ./...
+
+      - name: Static security analysis
+        run: golangci-lint run --timeout=5m
+
+      - name: Filesystem scan
+        uses: aquasecurity/trivy-action@d2a0b60797ff03db6132bd4e2b293f9b37081297 # master
+        with:
+          scan-type: fs
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+          ignore-unfixed: true
+
+      - name: Web dependency audit
+        run: |
+          set -euo pipefail
+          if [ -f web/package.json ]; then
+            npm audit --prefix web --omit=dev --audit-level=high
+          else
+            echo "web workspace does not exist yet"
+          fi
+
+  build-images:
+    name: build images
+    needs: [detect-changes, test-go-unit, test-web]
+    if: always() && !cancelled() && needs.detect-changes.outputs.code == 'true' && needs.test-go-unit.result != 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build images
+        run: |
+          set -euo pipefail
+          if [ ! -f deploy/compose.yaml ]; then
+            echo "the compose stack does not exist yet"
+            exit 0
+          fi
+          make images
+
+      - name: Image size report
+        if: always()
+        run: |
+          set -euo pipefail
+          if docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep -q fulcrum; then
+            {
+              echo "### Image sizes"
+              echo ""
+              docker image ls --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep fulcrum
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  e2e-compose:
+    name: compose end to end
+    needs: build-images
+    if: always() && !cancelled() && needs.build-images.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Primary flow, idempotency, broker kill and recovery
+        run: |
+          set -euo pipefail
+          if [ ! -x scripts/e2e.sh ]; then
+            echo "the end to end script does not exist yet"
+            exit 0
+          fi
+          make e2e
+
+      - name: Collect container logs on failure
+        if: failure()
+        run: |
+          set -euo pipefail
+          if [ -f deploy/compose.yaml ]; then
+            docker compose -f deploy/compose.yaml logs --no-color > compose-logs.txt || true
+          fi
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: failure()
+        with:
+          name: compose-logs
+          path: compose-logs.txt
+          if-no-files-found: ignore
+
+  pipeline-summary:
+    name: pipeline summary
+    needs: [quality, contract, test-go-unit, test-go-integration, test-web, security, build-images, e2e-compose]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Render the gate table
+        run: |
+          {
+            echo "## Pipeline gates"
+            echo ""
+            echo "| Gate | Result |"
+            echo "| --- | --- |"
+            echo "| quality | ${{ needs.quality.result }} |"
+            echo "| contract | ${{ needs.contract.result }} |"
+            echo "| go unit | ${{ needs.test-go-unit.result }} |"
+            echo "| go integration | ${{ needs.test-go-integration.result }} |"
+            echo "| web | ${{ needs.test-web.result }} |"
+            echo "| security | ${{ needs.security.result }} |"
+            echo "| images | ${{ needs.build-images.result }} |"
+            echo "| end to end | ${{ needs.e2e-compose.result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail when a required gate did not pass
+        run: |
+          set -euo pipefail
+          failed=0
+          for result in "${{ needs.quality.result }}" "${{ needs.contract.result }}" \
+                        "${{ needs.test-go-unit.result }}" "${{ needs.test-go-integration.result }}" \
+                        "${{ needs.test-web.result }}" "${{ needs.security.result }}" \
+                        "${{ needs.build-images.result }}" "${{ needs.e2e-compose.result }}"; do
+            case "${result}" in
+              success|skipped) ;;
+              *) failed=1 ;;
+            esac
+          done
+          if [ "${failed}" -ne 0 ]; then
+            echo "at least one gate did not pass"
+            exit 1
+          fi

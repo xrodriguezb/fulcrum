@@ -1,0 +1,242 @@
+openapi: 3.1.0
+info:
+  title: Fulcrum API
+  version: 0.1.0
+  description: |
+    Order and inventory reservation platform.
+
+    This document is the contract. The Go handler tests assert against it and the
+    TypeScript client types are generated from it, so drift between the two
+    languages is not possible without failing the pipeline.
+  license:
+    name: MIT
+    identifier: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: orders
+    description: Order creation and retrieval
+  - name: health
+    description: Liveness and readiness
+
+paths:
+  /api/v1/orders:
+    post:
+      operationId: createOrder
+      summary: Create an order and reserve inventory
+      description: |
+        Reserves inventory for every line and persists the order in a single
+        transaction. The Idempotency-Key header is required: a retry of the same
+        request returns the stored response rather than reserving again.
+      tags: [orders]
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrderRequest'
+      responses:
+        '201':
+          description: The order was created and inventory reserved.
+          headers:
+            Idempotent-Replay:
+              description: Present and true when the stored response was replayed.
+              schema:
+                type: boolean
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Order'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '413':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+        '500':
+          $ref: '#/components/responses/Problem'
+
+  /healthz:
+    get:
+      operationId: liveness
+      summary: Liveness probe
+      description: Reports that the process is running. No dependency is checked.
+      tags: [health]
+      responses:
+        '200':
+          description: The process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /readyz:
+    get:
+      operationId: readiness
+      summary: Readiness probe
+      description: Checks the database and the broker before reporting ready.
+      tags: [health]
+      responses:
+        '200':
+          description: Every dependency answered.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+        '503':
+          $ref: '#/components/responses/Problem'
+
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Client-chosen key that makes order creation safe to retry. Reusing a key
+        with a different body is rejected rather than silently accepted.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 255
+
+  responses:
+    Problem:
+      description: An error, described as RFC 9457 problem details.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    CreateOrderRequest:
+      type: object
+      additionalProperties: false
+      required: [customer_id, lines]
+      properties:
+        customer_id:
+          type: string
+          format: uuid
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/OrderLineRequest'
+
+    OrderLineRequest:
+      type: object
+      additionalProperties: false
+      required: [sku, quantity]
+      properties:
+        sku:
+          type: string
+          pattern: '^[A-Z0-9][A-Z0-9-]{2,31}$'
+        quantity:
+          type: integer
+          minimum: 1
+          maximum: 1000
+
+    Order:
+      type: object
+      additionalProperties: false
+      required: [id, customer_id, status, total_cents, currency, lines, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        customer_id:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/OrderStatus'
+        total_cents:
+          type: integer
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderLine'
+        created_at:
+          type: string
+          format: date-time
+
+    OrderLine:
+      type: object
+      additionalProperties: false
+      required: [sku, quantity, unit_price_cents]
+      properties:
+        sku:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+        unit_price_cents:
+          type: integer
+          minimum: 0
+
+    OrderStatus:
+      type: string
+      description: |
+        pending is the state an order is created in. The consumer moves it to
+        confirmed when it processes the order.created event.
+      enum: [pending, confirmed, cancelled]
+
+    HealthStatus:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded]
+        checks:
+          type: object
+          additionalProperties:
+            type: string
+
+    Problem:
+      type: object
+      description: RFC 9457 problem details, extended with a stable code and a trace id.
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        code:
+          type: string
+          enum:
+            - VALIDATION_FAILED
+            - ORDER_NOT_FOUND
+            - ORDER_INVALID_STATE
+            - INVENTORY_INSUFFICIENT
+            - IDEMPOTENCY_KEY_REQUIRED
+            - IDEMPOTENCY_KEY_REUSE
+            - IDEMPOTENCY_REQUEST_IN_PROGRESS
+            - REQUEST_TOO_LARGE
+            - UNSUPPORTED_MEDIA_TYPE
+            - SERVICE_UNAVAILABLE
+            - INTERNAL_ERROR
+        detail:
+          type: string
+        instance:
+          type: string
+        trace_id:
+          type: string

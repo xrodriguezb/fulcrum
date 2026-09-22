@@ -1,0 +1,68 @@
+rc: .lefthookrc
+
+# Layer 1 of the feedback chain: every check cheap enough to run in under ten
+# seconds runs here, on staged files only, so the expensive layers never have to
+# report something a developer could have known before the commit existed.
+
+pre-commit:
+  parallel: false
+  skip:
+    - merge
+    - rebase
+  commands:
+    forbidden-content:
+      run: ./scripts/check-forbidden-content.sh --staged
+    gofmt:
+      glob: "*.go"
+      run: |
+        out="$(gofmt -l {staged_files})"
+        if [ -n "$out" ]; then echo "gofmt needed:"; echo "$out"; exit 1; fi
+    goimports:
+      glob: "*.go"
+      run: |
+        out="$("$(go env GOPATH)/bin/goimports" -l -local github.com/xrodriguezb/fulcrum {staged_files})"
+        if [ -n "$out" ]; then echo "goimports needed:"; echo "$out"; exit 1; fi
+    go-vet:
+      glob: "*.go"
+      run: |
+        pkgs="$(./scripts/staged-go-packages.sh {staged_files})"
+        if [ -n "$pkgs" ]; then go vet $pkgs; else echo "no compilable package staged"; fi
+    golangci-lint:
+      glob: "*.go"
+      run: |
+        pkgs="$(./scripts/staged-go-packages.sh {staged_files})"
+        if [ -n "$pkgs" ]; then "$(go env GOPATH)/bin/golangci-lint" run --fast-only $pkgs; else echo "no compilable package staged"; fi
+    gitleaks:
+      run: '"$(go env GOPATH)/bin/gitleaks" protect --staged --redact --no-banner'
+    web-typecheck:
+      glob: "web/**/*.{ts,tsx}"
+      run: npm run --prefix web typecheck
+    web-lint:
+      glob: "web/**/*.{ts,tsx}"
+      run: npm run --prefix web lint
+    web-format:
+      glob: "web/**/*.{ts,tsx,css,json}"
+      run: npm run --prefix web format:check
+
+commit-msg:
+  commands:
+    commitlint:
+      run: npx --no-install commitlint --edit {1}
+    forbidden-content:
+      run: ./scripts/check-forbidden-content.sh --message {1}
+
+# Layer 2: everything that still fits inside ninety seconds, so a push that would
+# fail the pipeline fails on the developer's machine first.
+pre-push:
+  parallel: false
+  commands:
+    go-test:
+      run: go test -short ./...
+    go-race:
+      run: go test -race -short ./internal/... ./cmd/... 2>/dev/null || go test -race -short ./...
+    architecture:
+      run: |
+        if [ -f test/architecture_test.go ]; then go test ./test/ -run TestArchitecture; else echo "architecture test not present yet"; fi
+    web-test:
+      run: |
+        if [ -f web/package.json ]; then npm run --prefix web test; else echo "web not present yet"; fi
