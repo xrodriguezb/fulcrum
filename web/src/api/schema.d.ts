@@ -4,572 +4,561 @@
  */
 
 export interface paths {
-  '/api/v1/orders': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List orders, newest first */
+        get: operations["listOrders"];
+        put?: never;
+        /**
+         * Create an order and reserve inventory
+         * @description Reserves inventory for every line and persists the order in a single
+         *     transaction. The Idempotency-Key header is required: a retry of the same
+         *     request returns the stored response rather than reserving again.
+         */
+        post: operations["createOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** List orders, newest first */
-    get: operations['listOrders'];
-    put?: never;
-    /**
-     * Create an order and reserve inventory
-     * @description Reserves inventory for every line and persists the order in a single
-     *     transaction. The Idempotency-Key header is required: a retry of the same
-     *     request returns the stored response rather than reserving again.
-     */
-    post: operations['createOrder'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/orders/{id}': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/orders/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fetch one order */
+        get: operations["getOrder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Fetch one order */
-    get: operations['getOrder'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/inventory': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/inventory": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Current stock positions */
+        get: operations["listInventory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Current stock positions */
-    get: operations['listInventory'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/ops/outbox': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/ops/outbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Outbox depth, dead letter count and stuck idempotency keys
+         * @description One query behind one endpoint. The console polls this, so it answers
+         *     every operational question in a single round trip.
+         */
+        get: operations["getOperationalSnapshot"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Outbox depth, dead letter count and stuck idempotency keys
-     * @description One query behind one endpoint. The console polls this, so it answers
-     *     every operational question in a single round trip.
-     */
-    get: operations['getOperationalSnapshot'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/ops/dead-letters': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/ops/dead-letters": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Events that will not be retried again */
+        get: operations["listDeadLetters"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Events that will not be retried again */
-    get: operations['listDeadLetters'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/v1/ops/stream': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/api/v1/ops/stream": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Server sent events carrying operational snapshots
+         * @description Emits an event named snapshot whenever the operational state changes,
+         *     with the same body as the outbox endpoint, plus a comment heartbeat so
+         *     an idle connection is not closed by a proxy.
+         */
+        get: operations["streamOperationalState"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Server sent events carrying operational snapshots
-     * @description Emits an event named snapshot whenever the operational state changes,
-     *     with the same body as the outbox endpoint, plus a comment heartbeat so
-     *     an idle connection is not closed by a proxy.
-     */
-    get: operations['streamOperationalState'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/metrics': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Prometheus exposition */
+        get: operations["metrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /** Prometheus exposition */
-    get: operations['metrics'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/healthz': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/healthz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Liveness probe
+         * @description Reports that the process is running. No dependency is checked.
+         */
+        get: operations["liveness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Liveness probe
-     * @description Reports that the process is running. No dependency is checked.
-     */
-    get: operations['liveness'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/readyz': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
+    "/readyz": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Readiness probe
+         * @description Checks the database and the broker before reporting ready.
+         */
+        get: operations["readiness"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
     };
-    /**
-     * Readiness probe
-     * @description Checks the database and the broker before reporting ready.
-     */
-    get: operations['readiness'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-  schemas: {
-    CreateOrderRequest: {
-      /** Format: uuid */
-      customer_id: string;
-      lines: components['schemas']['OrderLineRequest'][];
+    schemas: {
+        CreateOrderRequest: {
+            /** Format: uuid */
+            customer_id: string;
+            lines: components["schemas"]["OrderLineRequest"][];
+        };
+        OrderLineRequest: {
+            sku: string;
+            quantity: number;
+        };
+        Order: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            customer_id: string;
+            status: components["schemas"]["OrderStatus"];
+            total_cents: number;
+            currency: string;
+            lines: components["schemas"]["OrderLine"][];
+            /** Format: date-time */
+            created_at: string;
+        };
+        OrderLine: {
+            sku: string;
+            quantity: number;
+            unit_price_cents: number;
+        };
+        OrderPage: {
+            items: components["schemas"]["Order"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        InventoryItem: {
+            sku: string;
+            available: number;
+            reserved: number;
+            unit_price_cents: number;
+            currency: string;
+            version: number;
+        };
+        InventoryPage: {
+            items: components["schemas"]["InventoryItem"][];
+        };
+        OutboxHealth: {
+            /** @description Events written and not yet published. */
+            pending: number;
+            /** @description Unpublished events that have already failed at least once. */
+            failing: number;
+            published: number;
+            /** @description Age of the oldest unpublished event. The number that tells an operator whether publication is keeping up. */
+            oldest_unpublished_seconds: number;
+        };
+        OperationalSnapshot: {
+            outbox: components["schemas"]["OutboxHealth"];
+            dead_letters: number;
+            /**
+             * @description Claims that never completed. A crash between the idempotency claim
+             *     and the business transaction leaves exactly this trace, so it is
+             *     surfaced rather than hidden.
+             */
+            stuck_idempotency_keys: number;
+            /** Format: date-time */
+            observed_at: string;
+        };
+        DeadLetter: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            event_id: string;
+            consumer_name: string;
+            event_type: string;
+            attempts: number;
+            /** Format: date-time */
+            first_failed_at: string;
+            /** Format: date-time */
+            last_failed_at: string;
+            /** @description An operator-facing summary. Never a driver error or a stack trace. */
+            failure_reason: string;
+            correlation_id?: string;
+            trace_id?: string;
+        };
+        DeadLetterPage: {
+            items: components["schemas"]["DeadLetter"][];
+            total: number;
+            limit: number;
+            offset: number;
+        };
+        /**
+         * @description pending is the state an order is created in. The consumer moves it to
+         *     confirmed when it processes the order.created event.
+         * @enum {string}
+         */
+        OrderStatus: "pending" | "confirmed" | "cancelled";
+        HealthStatus: {
+            /** @enum {string} */
+            status: "ok" | "degraded";
+            checks?: {
+                [key: string]: string;
+            };
+        };
+        /** @description RFC 9457 problem details, extended with a stable code and a trace id. */
+        Problem: {
+            /** Format: uri */
+            type: string;
+            title: string;
+            status: number;
+            /** @enum {string} */
+            code: "VALIDATION_FAILED" | "ORDER_NOT_FOUND" | "ORDER_INVALID_STATE" | "INVENTORY_INSUFFICIENT" | "IDEMPOTENCY_KEY_REQUIRED" | "IDEMPOTENCY_KEY_REUSE" | "IDEMPOTENCY_REQUEST_IN_PROGRESS" | "REQUEST_TOO_LARGE" | "UNSUPPORTED_MEDIA_TYPE" | "SERVICE_UNAVAILABLE" | "INTERNAL_ERROR";
+            detail?: string;
+            instance?: string;
+            trace_id?: string;
+        };
     };
-    OrderLineRequest: {
-      sku: string;
-      quantity: number;
-    };
-    Order: {
-      /** Format: uuid */
-      id: string;
-      /** Format: uuid */
-      customer_id: string;
-      status: components['schemas']['OrderStatus'];
-      total_cents: number;
-      currency: string;
-      lines: components['schemas']['OrderLine'][];
-      /** Format: date-time */
-      created_at: string;
-    };
-    OrderLine: {
-      sku: string;
-      quantity: number;
-      unit_price_cents: number;
-    };
-    OrderPage: {
-      items: components['schemas']['Order'][];
-      total: number;
-      limit: number;
-      offset: number;
-    };
-    InventoryItem: {
-      sku: string;
-      available: number;
-      reserved: number;
-      unit_price_cents: number;
-      currency: string;
-      version: number;
-    };
-    InventoryPage: {
-      items: components['schemas']['InventoryItem'][];
-    };
-    OutboxHealth: {
-      /** @description Events written and not yet published. */
-      pending: number;
-      /** @description Unpublished events that have already failed at least once. */
-      failing: number;
-      published: number;
-      /** @description Age of the oldest unpublished event. The number that tells an operator whether publication is keeping up. */
-      oldest_unpublished_seconds: number;
-    };
-    OperationalSnapshot: {
-      outbox: components['schemas']['OutboxHealth'];
-      dead_letters: number;
-      /**
-       * @description Claims that never completed. A crash between the idempotency claim
-       *     and the business transaction leaves exactly this trace, so it is
-       *     surfaced rather than hidden.
-       */
-      stuck_idempotency_keys: number;
-      /** Format: date-time */
-      observed_at: string;
-    };
-    DeadLetter: {
-      /** Format: uuid */
-      id: string;
-      /** Format: uuid */
-      event_id: string;
-      consumer_name: string;
-      event_type: string;
-      attempts: number;
-      /** Format: date-time */
-      first_failed_at: string;
-      /** Format: date-time */
-      last_failed_at: string;
-      /** @description An operator-facing summary. Never a driver error or a stack trace. */
-      failure_reason: string;
-      correlation_id?: string;
-      trace_id?: string;
-    };
-    DeadLetterPage: {
-      items: components['schemas']['DeadLetter'][];
-      total: number;
-      limit: number;
-      offset: number;
-    };
-    /**
-     * @description pending is the state an order is created in. The consumer moves it to
-     *     confirmed when it processes the order.created event.
-     * @enum {string}
-     */
-    OrderStatus: 'pending' | 'confirmed' | 'cancelled';
-    HealthStatus: {
-      /** @enum {string} */
-      status: 'ok' | 'degraded';
-      checks?: {
-        [key: string]: string;
-      };
-    };
-    /** @description RFC 9457 problem details, extended with a stable code and a trace id. */
-    Problem: {
-      /** Format: uri */
-      type: string;
-      title: string;
-      status: number;
-      /** @enum {string} */
-      code:
-        | 'VALIDATION_FAILED'
-        | 'ORDER_NOT_FOUND'
-        | 'ORDER_INVALID_STATE'
-        | 'INVENTORY_INSUFFICIENT'
-        | 'IDEMPOTENCY_KEY_REQUIRED'
-        | 'IDEMPOTENCY_KEY_REUSE'
-        | 'IDEMPOTENCY_REQUEST_IN_PROGRESS'
-        | 'REQUEST_TOO_LARGE'
-        | 'UNSUPPORTED_MEDIA_TYPE'
-        | 'SERVICE_UNAVAILABLE'
-        | 'INTERNAL_ERROR';
-      detail?: string;
-      instance?: string;
-      trace_id?: string;
-    };
-  };
-  responses: {
-    /** @description An error, described as RFC 9457 problem details. */
-    Problem: {
-      headers: {
-        [name: string]: unknown;
-      };
-      content: {
-        'application/problem+json': components['schemas']['Problem'];
-      };
-    };
-  };
-  parameters: {
-    /**
-     * @description Client-chosen key that makes order creation safe to retry. Reusing a key
-     *     with a different body is rejected rather than silently accepted.
-     */
-    IdempotencyKey: string;
-    /** @description Page size. Bounded, because an unbounded list is a denial of service with a friendly name. */
-    Limit: number;
-    Offset: number;
-  };
-  requestBodies: never;
-  headers: never;
-  pathItems: never;
-}
-export type $defs = Record<string, never>;
-export interface operations {
-  listOrders: {
-    parameters: {
-      query?: {
-        /** @description Page size. Bounded, because an unbounded list is a denial of service with a friendly name. */
-        limit?: components['parameters']['Limit'];
-        offset?: components['parameters']['Offset'];
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
     responses: {
-      /** @description A page of orders. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+        /** @description An error, described as RFC 9457 problem details. */
+        Problem: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
         };
-        content: {
-          'application/json': components['schemas']['OrderPage'];
-        };
-      };
-      400: components['responses']['Problem'];
-      500: components['responses']['Problem'];
     };
-  };
-  createOrder: {
     parameters: {
-      query?: never;
-      header: {
         /**
          * @description Client-chosen key that makes order creation safe to retry. Reusing a key
          *     with a different body is rejected rather than silently accepted.
          */
-        'Idempotency-Key': components['parameters']['IdempotencyKey'];
-      };
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['CreateOrderRequest'];
-      };
-    };
-    responses: {
-      /** @description The order was created and inventory reserved. */
-      201: {
-        headers: {
-          /** @description Present and true when the stored response was replayed. */
-          'Idempotent-Replay'?: boolean;
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['Order'];
-        };
-      };
-      400: components['responses']['Problem'];
-      409: components['responses']['Problem'];
-      413: components['responses']['Problem'];
-      415: components['responses']['Problem'];
-      422: components['responses']['Problem'];
-      500: components['responses']['Problem'];
-    };
-  };
-  getOrder: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description The order. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['Order'];
-        };
-      };
-      400: components['responses']['Problem'];
-      404: components['responses']['Problem'];
-      500: components['responses']['Problem'];
-    };
-  };
-  listInventory: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Every stock position, ordered by sku. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['InventoryPage'];
-        };
-      };
-      500: components['responses']['Problem'];
-    };
-  };
-  getOperationalSnapshot: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description The current operational state. */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['OperationalSnapshot'];
-        };
-      };
-      500: components['responses']['Problem'];
-    };
-  };
-  listDeadLetters: {
-    parameters: {
-      query?: {
+        IdempotencyKey: string;
         /** @description Page size. Bounded, because an unbounded list is a denial of service with a friendly name. */
-        limit?: components['parameters']['Limit'];
-        offset?: components['parameters']['Offset'];
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
+        Limit: number;
+        Offset: number;
     };
-    requestBody?: never;
-    responses: {
-      /** @description A page of dead letter entries, newest failure first. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
+}
+export type $defs = Record<string, never>;
+export interface operations {
+    listOrders: {
+        parameters: {
+            query?: {
+                /** @description Page size. Bounded, because an unbounded list is a denial of service with a friendly name. */
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          'application/json': components['schemas']['DeadLetterPage'];
+        requestBody?: never;
+        responses: {
+            /** @description A page of orders. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderPage"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
         };
-      };
-      400: components['responses']['Problem'];
-      500: components['responses']['Problem'];
     };
-  };
-  streamOperationalState: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description An event stream. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    createOrder: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Client-chosen key that makes order creation safe to retry. Reusing a key
+                 *     with a different body is rejected rather than silently accepted.
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+            };
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          'text/event-stream': string;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOrderRequest"];
+            };
         };
-      };
-      500: components['responses']['Problem'];
-    };
-  };
-  metrics: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Metrics in the Prometheus text format. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+        responses: {
+            /** @description The order was created and inventory reserved. */
+            201: {
+                headers: {
+                    /** @description Present and true when the stored response was replayed. */
+                    "Idempotent-Replay"?: boolean;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Order"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            409: components["responses"]["Problem"];
+            413: components["responses"]["Problem"];
+            415: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
         };
-        content: {
-          'text/plain': string;
-        };
-      };
     };
-  };
-  liveness: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description The process is alive. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    getOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
         };
-        content: {
-          'application/json': components['schemas']['HealthStatus'];
+        requestBody?: never;
+        responses: {
+            /** @description The order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Order"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            404: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
         };
-      };
     };
-  };
-  readiness: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Every dependency answered. */
-      200: {
-        headers: {
-          [name: string]: unknown;
+    listInventory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
         };
-        content: {
-          'application/json': components['schemas']['HealthStatus'];
+        requestBody?: never;
+        responses: {
+            /** @description Every stock position, ordered by sku. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InventoryPage"];
+                };
+            };
+            500: components["responses"]["Problem"];
         };
-      };
-      503: components['responses']['Problem'];
     };
-  };
+    getOperationalSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current operational state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OperationalSnapshot"];
+                };
+            };
+            500: components["responses"]["Problem"];
+        };
+    };
+    listDeadLetters: {
+        parameters: {
+            query?: {
+                /** @description Page size. Bounded, because an unbounded list is a denial of service with a friendly name. */
+                limit?: components["parameters"]["Limit"];
+                offset?: components["parameters"]["Offset"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of dead letter entries, newest failure first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeadLetterPage"];
+                };
+            };
+            400: components["responses"]["Problem"];
+            500: components["responses"]["Problem"];
+        };
+    };
+    streamOperationalState: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description An event stream. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            500: components["responses"]["Problem"];
+        };
+    };
+    metrics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Metrics in the Prometheus text format. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/plain": string;
+                };
+            };
+        };
+    };
+    liveness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The process is alive. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthStatus"];
+                };
+            };
+        };
+    };
+    readiness: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every dependency answered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthStatus"];
+                };
+            };
+            503: components["responses"]["Problem"];
+        };
+    };
 }

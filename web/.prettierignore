@@ -1,0 +1,5 @@
+# Generated from api/openapi.yaml. Formatting it here would make every
+# regeneration produce a diff, which is what the contract check exists to catch.
+src/api/schema.d.ts
+dist
+coverage
