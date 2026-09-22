@@ -127,19 +127,91 @@ LIMIT  $1 OFFSET $2`
 		return nil, 0, errs.Internal("iterate orders", rows.Err())
 	}
 
+	ids := make([]string, 0, len(collected))
+	for _, row := range collected {
+		ids = append(ids, row.id)
+	}
+
+	// One query for every line on the page, rather than one per order. A page of
+	// a hundred orders was a hundred and one round trips, which is the kind of
+	// cost that only appears once the list has real data in it.
+	linesByOrder, err := r.linesForAll(ctx, ids)
+	if err != nil {
+		return nil, 0, err
+	}
+
 	orders := make([]*domain.Order, 0, len(collected))
 	for _, row := range collected {
-		lines, linesErr := r.linesFor(ctx, row.id)
-		if linesErr != nil {
-			return nil, 0, linesErr
-		}
-		order, buildErr := row.toAggregate(lines)
+		order, buildErr := row.toAggregate(linesByOrder[row.id])
 		if buildErr != nil {
 			return nil, 0, buildErr
 		}
 		orders = append(orders, order)
 	}
 	return orders, total, nil
+}
+
+// linesForAll loads the lines of several orders in one round trip.
+func (r *Repository) linesForAll(ctx context.Context, orderIDs []string) (map[string][]domain.Line, error) {
+	if len(orderIDs) == 0 {
+		return map[string][]domain.Line{}, nil
+	}
+
+	const query = `
+SELECT order_id::text, sku, quantity, unit_price_cents
+FROM   order_lines
+WHERE  order_id = ANY($1)
+ORDER  BY order_id, sku`
+
+	rows, err := r.tx.Executor(ctx).Query(ctx, query, orderIDs)
+	if err != nil {
+		return nil, errs.Internal("read order lines", err)
+	}
+	defer rows.Close()
+
+	byOrder := make(map[string][]domain.Line, len(orderIDs))
+	for rows.Next() {
+		var (
+			orderID   string
+			rawSKU    string
+			quantity  int
+			unitCents int64
+		)
+		if scanErr := rows.Scan(&orderID, &rawSKU, &quantity, &unitCents); scanErr != nil {
+			return nil, errs.Internal("scan order line", scanErr)
+		}
+		line, lineErr := toLine(rawSKU, quantity, unitCents)
+		if lineErr != nil {
+			return nil, lineErr
+		}
+		byOrder[orderID] = append(byOrder[orderID], line)
+	}
+	if rows.Err() != nil {
+		return nil, errs.Internal("iterate order lines", rows.Err())
+	}
+	return byOrder, nil
+}
+
+// toLine rebuilds one line from stored values, rejecting anything the domain
+// would not have produced.
+func toLine(rawSKU string, quantity int, unitCents int64) (domain.Line, error) {
+	sku, err := domain.NewSKU(rawSKU)
+	if err != nil {
+		return domain.Line{}, errs.Internal("stored sku is not valid", err)
+	}
+	parsedQuantity, err := domain.NewQuantity(quantity)
+	if err != nil {
+		return domain.Line{}, errs.Internal("stored quantity is not valid", err)
+	}
+	price, err := domain.NewMoney(unitCents, "EUR")
+	if err != nil {
+		return domain.Line{}, errs.Internal("stored price is not valid", err)
+	}
+	line, err := domain.NewLine(sku, parsedQuantity, price)
+	if err != nil {
+		return domain.Line{}, errs.Internal("stored line is not valid", err)
+	}
+	return line, nil
 }
 
 func (r *Repository) linesFor(ctx context.Context, orderID string) ([]domain.Line, error) {
@@ -165,22 +237,9 @@ ORDER  BY sku`
 		if scanErr := rows.Scan(&rawSKU, &quantity, &unitCents); scanErr != nil {
 			return nil, errs.Internal("scan order line", scanErr)
 		}
-
-		sku, skuErr := domain.NewSKU(rawSKU)
-		if skuErr != nil {
-			return nil, errs.Internal("stored sku is not valid", skuErr)
-		}
-		parsedQuantity, quantityErr := domain.NewQuantity(quantity)
-		if quantityErr != nil {
-			return nil, errs.Internal("stored quantity is not valid", quantityErr)
-		}
-		price, priceErr := domain.NewMoney(unitCents, "EUR")
-		if priceErr != nil {
-			return nil, errs.Internal("stored price is not valid", priceErr)
-		}
-		line, lineErr := domain.NewLine(sku, parsedQuantity, price)
+		line, lineErr := toLine(rawSKU, quantity, unitCents)
 		if lineErr != nil {
-			return nil, errs.Internal("stored line is not valid", lineErr)
+			return nil, lineErr
 		}
 		lines = append(lines, line)
 	}

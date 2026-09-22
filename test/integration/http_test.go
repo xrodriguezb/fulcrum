@@ -5,6 +5,7 @@ package integration
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -327,4 +328,53 @@ func TestOperationalEndpointsAndMetricsAreServed(t *testing.T) {
 	if strings.Contains(body, "/api/v1/orders/00000000-") {
 		t.Errorf("an identifier reached a metric label: %s", body)
 	}
+}
+
+// A page of orders must cost one query for the orders and one for their lines.
+// The first implementation issued one query per order, which is invisible with
+// two orders in the table and expensive with a hundred.
+func TestListingOrdersDoesNotQueryPerOrder(t *testing.T) {
+	h := newAPI(t)
+	seedInventory(t, h.pool, "WIDGET-001", 100, 1050)
+
+	const orders = 12
+	for i := range orders {
+		response := h.do(t, http.MethodPost, "/api/v1/orders", orderBody, map[string]string{
+			"Content-Type":    "application/json",
+			"Idempotency-Key": fmt.Sprintf("page-key-%d", i),
+		})
+		if response.Status != http.StatusCreated {
+			t.Fatalf("create %d: status %d", i, response.Status)
+		}
+	}
+
+	before := queryCount(t, h.pool)
+	listed := h.do(t, http.MethodGet, "/api/v1/orders?limit=12", "", nil)
+	if listed.Status != http.StatusOK {
+		t.Fatalf("list status = %d, want 200", listed.Status)
+	}
+	after := queryCount(t, h.pool)
+
+	// The page runs one statement for the orders and one for the lines. The
+	// allowance covers the statistics read itself and pool bookkeeping.
+	if queries := after - before; queries > 6 {
+		t.Errorf("listing %d orders issued %d round trips, want a constant handful", orders, queries)
+	}
+	if !strings.Contains(listed.Body, `"total":12`) {
+		t.Errorf("the page does not report every order: %s", listed.Body)
+	}
+}
+
+// queryCount reads the transaction counter PostgreSQL keeps for this database.
+// A query outside an explicit transaction counts as one, which is what makes it
+// a usable proxy for round trips here.
+func queryCount(t *testing.T, pool *pgxpool.Pool) int64 {
+	t.Helper()
+
+	var count int64
+	const query = `SELECT xact_commit + xact_rollback FROM pg_stat_database WHERE datname = current_database()`
+	if err := pool.QueryRow(t.Context(), query).Scan(&count); err != nil {
+		t.Fatalf("read statement counter: %v", err)
+	}
+	return count
 }
