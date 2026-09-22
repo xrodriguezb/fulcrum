@@ -345,3 +345,41 @@ func (a *alwaysTransient) calls() int {
 	defer a.mu.Unlock()
 	return a.count
 }
+
+// An envelope that decodes but carries an identifier the database cannot store
+// must still reach the dead letter queue. The deduplication row and the dead
+// letter entry both key the event by uuid, so an identifier that is merely
+// non-empty is not enough: without a check at the edge the insert fails, the
+// delivery is returned to the broker, and the event is redelivered forever
+// without ever being recorded anywhere an operator would look.
+func TestEnvelopeWithAnUnstorableIdentifierIsDeadLettered(t *testing.T) {
+	p := newPipeline(t, "bad-id-flow", nil)
+
+	stop := p.run(t)
+	defer stop()
+
+	envelope := []byte(`{"id":"not-a-uuid","type":"order.created","version":1,` +
+		`"occurred_at":"2026-01-01T00:00:00Z","correlation_id":"audit-bad-id","trace_id":"",` +
+		`"aggregate_id":"11111111-1111-1111-1111-111111111111","aggregate_type":"order",` +
+		`"data":{"order_id":"11111111-1111-1111-1111-111111111111"}}`)
+
+	if err := p.client.Conn().Publish(p.subject+".order.created", envelope); err != nil {
+		t.Fatalf("publish the envelope: %v", err)
+	}
+	if err := p.client.Conn().Flush(); err != nil {
+		t.Fatalf("flush: %v", err)
+	}
+
+	waitForCondition(t, func() bool { return countRows(t, p.harness.pool, "dead_letter_events") == 1 })
+
+	var reason string
+	if err := p.harness.pool.QueryRow(t.Context(),
+		`SELECT failure_reason FROM dead_letter_events`).Scan(&reason); err != nil {
+		t.Fatalf("read the dead letter: %v", err)
+	}
+	for _, leak := range []string{"SQLSTATE", "invalid input syntax", "goroutine", "/Users/"} {
+		if strings.Contains(reason, leak) {
+			t.Errorf("the stored reason leaked %q: %s", leak, reason)
+		}
+	}
+}
