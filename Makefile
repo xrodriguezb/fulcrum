@@ -64,14 +64,14 @@ endif
 
 .PHONY: fmt-check
 fmt-check: ## fail if any file is not formatted
-	@files="$$(git ls-files '*.go')"; \\
-	if [ -n "$$files" ]; then \\
-	  out="$$(gofmt -l $$files)"; \\
-	  if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi; \\
-	  if [ -x "$(GOBIN)/goimports" ]; then \\
-	    out="$$($(GOBIN)/goimports -l -local github.com/xrodriguezb/fulcrum $$files)"; \\
-	    if [ -n "$$out" ]; then echo "goimports needed:"; echo "$$out"; exit 1; fi; \\
-	  fi; \\
+	@files="$$(git ls-files '*.go')"; \
+	if [ -n "$$files" ]; then \
+	  out="$$(gofmt -l $$files)"; \
+	  if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi; \
+	  if [ -x "$(GOBIN)/goimports" ]; then \
+	    out="$$($(GOBIN)/goimports -l -local github.com/xrodriguezb/fulcrum $$files)"; \
+	    if [ -n "$$out" ]; then echo "goimports needed:"; echo "$$out"; exit 1; fi; \
+	  fi; \
 	fi
 	@./scripts/check-forbidden-content.sh --all
 	@bash scripts/check-forbidden-content.test.sh >/dev/null
@@ -115,10 +115,10 @@ contract: ## validate openapi and assert generated types have no diff
 	$(DOCKER) run --rm -v "$(PWD)":/spec -w /spec $(REDOCLY_IMAGE) lint api/openapi.yaml
 ifeq ($(HAS_WEB),yes)
 	npm run --prefix $(WEB_DIR) generate:api
-	@if ! git diff --quiet -- $(WEB_DIR)/src/api/schema.d.ts; then \\
-	  echo "generated API types are out of date, run make contract and commit the result"; \\
-	  git --no-pager diff -- $(WEB_DIR)/src/api/schema.d.ts; \\
-	  exit 1; \\
+	@if ! git diff --quiet -- $(WEB_DIR)/src/api/schema.d.ts; then \
+	  echo "generated API types are out of date, run make contract and commit the result"; \
+	  git --no-pager diff -- $(WEB_DIR)/src/api/schema.d.ts; \
+	  exit 1; \
 	fi
 endif
 
