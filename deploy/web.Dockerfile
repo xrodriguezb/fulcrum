@@ -2,7 +2,7 @@
 # as a non-root user, which is why the unprivileged image is used rather than the
 # default one that starts as root and drops privileges afterwards.
 
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 
 WORKDIR /app
 
@@ -20,7 +20,7 @@ RUN npm run generate:api && npm run build
 # 1.27-alpine carrying 35 high and 2 critical advisories from an alpine release
 # it had stopped following. This tag tracks the maintained alpine base, which
 # currently scans clean.
-FROM nginxinc/nginx-unprivileged:1.30.5-alpine
+FROM nginxinc/nginx-unprivileged:1.31.5-alpine
 
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf

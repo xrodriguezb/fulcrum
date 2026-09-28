@@ -2,7 +2,7 @@
 # the build stage is defined once and both images stay identical in everything
 # except which binary they run.
 
-FROM golang:1.26-alpine AS build
+FROM golang:1.27-alpine AS build
 
 WORKDIR /src
 
